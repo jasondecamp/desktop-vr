@@ -17,6 +17,7 @@ export function computeOffAxisFrustum(
   screen: ScreenConfig,
   near: number = 0.05,
   far: number = 100,
+  viewportAspect?: number,
 ): Frustum {
   const halfW = screen.widthMeters / 2;
   const halfH = screen.heightMeters / 2;
@@ -27,12 +28,32 @@ export function computeOffAxisFrustum(
 
   const ratio = near / eye.z;
 
-  return {
-    left: (-halfW - eye.x) * ratio,
-    right: (halfW - eye.x) * ratio,
-    bottom: (-halfH - eye.y) * ratio,
-    top: (halfH - eye.y) * ratio,
-    near,
-    far,
-  };
+  let left = (-halfW - eye.x) * ratio;
+  let right = (halfW - eye.x) * ratio;
+  let bottom = (-halfH - eye.y) * ratio;
+  let top = (halfH - eye.y) * ratio;
+
+  // If the viewport aspect ratio differs from the screen's, expand the
+  // frustum so the scene isn't stretched. This keeps circles circular
+  // regardless of browser window shape.
+  if (viewportAspect !== undefined) {
+    const screenAspect = screen.widthMeters / screen.heightMeters;
+    if (viewportAspect > screenAspect) {
+      // Viewport is wider than screen — expand horizontal
+      const scale = viewportAspect / screenAspect;
+      const cx = (left + right) / 2;
+      const hw = (right - left) / 2;
+      left = cx - hw * scale;
+      right = cx + hw * scale;
+    } else if (viewportAspect < screenAspect) {
+      // Viewport is taller than screen — expand vertical
+      const scale = screenAspect / viewportAspect;
+      const cy = (bottom + top) / 2;
+      const hh = (top - bottom) / 2;
+      bottom = cy - hh * scale;
+      top = cy + hh * scale;
+    }
+  }
+
+  return { left, right, bottom, top, near, far };
 }

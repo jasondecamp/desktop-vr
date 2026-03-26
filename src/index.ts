@@ -15,7 +15,18 @@ export type { EyePosition, RawFaceData, TrackingConfig } from './tracking/types'
 // Projection
 export { computeOffAxisFrustum } from './projection/frustum';
 export { CoordinateMapper } from './projection/coordinateMapper';
+export { screenFromViewport } from './projection/screenFromViewport';
 export type { Frustum, ScreenConfig, CalibrationConfig } from './projection/types';
 
 // Filters
 export { OneEuroFilter, EMAFilter } from './tracking/filters';
+
+// UI
+export { CalibrationPanel } from './ui/CalibrationPanel';
+export type { CalibrationPanelConfig } from './ui/CalibrationPanel';
+export { CalibrationOverlay } from './ui/CalibrationOverlay';
+export type { CalibrationOverlayConfig } from './ui/CalibrationOverlay';
+export { GridRoom } from './ui/gridRoom';
+export type { GridRoomConfig } from './ui/gridRoom';
+export { DiagnosticOverlay } from './ui/DiagnosticOverlay';
+export type { DiagnosticOverlayConfig } from './ui/DiagnosticOverlay';

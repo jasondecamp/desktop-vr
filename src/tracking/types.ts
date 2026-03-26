@@ -7,6 +7,11 @@ export interface EyePosition {
   z: number;
 }
 
+export interface FaceLandmarkPoint {
+  x: number;
+  y: number;
+}
+
 export interface RawFaceData {
   /** Midpoint between eyes in camera pixel coordinates (0-1 normalized) */
   x: number;
@@ -14,6 +19,22 @@ export interface RawFaceData {
   y: number;
   /** Distance between pupils in camera pixel coordinates (0-1 normalized) */
   interPupillaryDistance: number;
+  /** Left iris center in normalized camera coordinates (0-1) */
+  leftEye: FaceLandmarkPoint;
+  /** Right iris center in normalized camera coordinates (0-1) */
+  rightEye: FaceLandmarkPoint;
+  /** Inner eye corners (canthi) — stable during blinks */
+  leftInnerCanthus: FaceLandmarkPoint;
+  rightInnerCanthus: FaceLandmarkPoint;
+  /** Outer eye corners — stable during blinks */
+  leftOuterCanthus: FaceLandmarkPoint;
+  rightOuterCanthus: FaceLandmarkPoint;
+  /** Nose bridge between eyes — very stable reference */
+  noseBridge: FaceLandmarkPoint;
+  /** Nose tip — stable vertical reference */
+  noseTip: FaceLandmarkPoint;
+  /** Whether either eye is currently blinking */
+  isBlinking: boolean;
 }
 
 export interface TrackingConfig {

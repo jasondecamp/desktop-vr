@@ -1,10 +1,6 @@
 import type { EyePosition, RawFaceData } from '../tracking/types';
 import type { CalibrationConfig, ScreenConfig } from './types';
-
-const DEFAULT_SCREEN: ScreenConfig = {
-  widthMeters: 0.34,
-  heightMeters: 0.21,
-};
+import { screenFromViewport } from './screenFromViewport';
 
 const DEFAULT_CALIBRATION: CalibrationConfig = {
   realIPD: 0.063,
@@ -23,7 +19,7 @@ export class CoordinateMapper {
     screen: Partial<ScreenConfig> = {},
     calibration: Partial<CalibrationConfig> = {},
   ) {
-    this.screen = { ...DEFAULT_SCREEN, ...screen };
+    this.screen = { ...screenFromViewport(), ...screen };
     this.calibration = { ...DEFAULT_CALIBRATION, ...calibration };
 
     // At distance D, an object of real size S appears as:
@@ -60,6 +56,10 @@ export class CoordinateMapper {
 
   getScreenConfig(): ScreenConfig {
     return { ...this.screen };
+  }
+
+  getCalibrationConfig(): CalibrationConfig {
+    return { ...this.calibration };
   }
 
   updateCalibration(updates: Partial<CalibrationConfig>): void {

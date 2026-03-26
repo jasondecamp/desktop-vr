@@ -35,7 +35,10 @@ export class CSSAdapter {
 
     // Set up the container for CSS 3D
     this.container.style.transformStyle = 'preserve-3d';
-    this.container.style.overflow = 'hidden';
+  }
+
+  updateScreen(screen: ScreenConfig): void {
+    this.screen = screen;
   }
 
   update(eye: EyePosition): void {
@@ -55,5 +58,13 @@ export class CSSAdapter {
 
     this.container.style.perspective = `${perspectivePx}px`;
     this.container.style.perspectiveOrigin = `${originX}px ${originY}px`;
+  }
+
+  setSensitivity(value: number): void {
+    this.sensitivity = value;
+  }
+
+  getSensitivity(): number {
+    return this.sensitivity;
   }
 }

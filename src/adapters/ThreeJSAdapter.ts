@@ -27,8 +27,13 @@ export class ThreeJSAdapter {
     this.far = config.far ?? 100;
   }
 
+  updateScreen(screen: ScreenConfig): void {
+    this.screen = screen;
+  }
+
   update(eye: EyePosition): void {
-    const frustum = computeOffAxisFrustum(eye, this.screen, this.near, this.far);
+    const viewportAspect = this.camera.aspect;
+    const frustum = computeOffAxisFrustum(eye, this.screen, this.near, this.far, viewportAspect);
     this.applyFrustum(frustum, eye);
   }
 

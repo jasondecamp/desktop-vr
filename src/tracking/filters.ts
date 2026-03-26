@@ -9,6 +9,10 @@ export class EMAFilter {
 
   constructor(private alpha: number = 0.3) {}
 
+  setAlpha(alpha: number): void {
+    this.alpha = alpha;
+  }
+
   filter(position: EyePosition): EyePosition {
     if (!this.prev) {
       this.prev = { ...position };
@@ -46,6 +50,12 @@ class OneEuroChannel {
     private beta: number = 0.007,
     private derivativeCutoff: number = 1.0,
   ) {}
+
+  updateParams(minCutoff: number, beta: number, derivativeCutoff: number): void {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.derivativeCutoff = derivativeCutoff;
+  }
 
   private smoothingFactor(cutoff: number, dt: number): number {
     const tau = 1.0 / (2 * Math.PI * cutoff);
@@ -89,7 +99,7 @@ export class OneEuroFilter {
   private yFilter: OneEuroChannel;
   private zFilter: OneEuroChannel;
 
-  constructor(minCutoff = 1.0, beta = 0.007, derivativeCutoff = 1.0) {
+  constructor(minCutoff = 3.0, beta = 0.05, derivativeCutoff = 1.0) {
     this.xFilter = new OneEuroChannel(minCutoff, beta, derivativeCutoff);
     this.yFilter = new OneEuroChannel(minCutoff, beta, derivativeCutoff);
     // Z (depth) gets extra smoothing since it's noisier from single-camera estimation
@@ -102,6 +112,12 @@ export class OneEuroFilter {
       y: this.yFilter.filter(position.y, timestamp),
       z: this.zFilter.filter(position.z, timestamp),
     };
+  }
+
+  updateParams(minCutoff: number, beta: number, derivativeCutoff: number = 1.0): void {
+    this.xFilter.updateParams(minCutoff, beta, derivativeCutoff);
+    this.yFilter.updateParams(minCutoff, beta, derivativeCutoff);
+    this.zFilter.updateParams(minCutoff * 0.5, beta * 0.5, derivativeCutoff);
   }
 
   reset(): void {
