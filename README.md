@@ -276,11 +276,43 @@ examples/
 ## Scripts
 
 ```bash
-npm run dev        # start dev server
+npm run dev        # start dev server (serves examples)
 npm run build      # build library (ESM + UMD) + type declarations
-npm run preview    # preview production build
+npm run build:site # build demo site for deployment (multi-page app)
+npm run preview    # preview production site build
 npm run typecheck  # type-check without emitting
 ```
+
+## Deployment
+
+The project includes a Vercel configuration for one-click deployment. The demo site builds as a multi-page app (separate from the library build) with a landing page linking to both demos.
+
+### Vercel (recommended)
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new)
+2. Vercel auto-detects the config from `vercel.json` — no settings to change
+3. Deploys automatically on every push to `main`
+
+Or deploy manually via CLI:
+
+```bash
+npx vercel --prod
+```
+
+The `vercel.json` configures:
+- **Build command:** `npm run build:site`
+- **Output directory:** `dist-site`
+
+### Other hosts
+
+Any static hosting that can run a build command works:
+
+```bash
+npm run build:site
+# serve the dist-site/ directory
+```
+
+Note: webcam tracking requires HTTPS. Most hosting providers (Vercel, Netlify, GitHub Pages) provide this by default.
 
 ## Dependencies
 
