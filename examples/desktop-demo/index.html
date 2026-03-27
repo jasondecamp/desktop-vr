@@ -40,15 +40,23 @@
     .layer > * { pointer-events: auto; }
 
     .layer-wallpaper {
+      transform: translateZ(-300px);
+    }
+
+    .layer-stars-far {
+      transform: translateZ(-250px);
+    }
+
+    .layer-stars-mid {
+      transform: translateZ(-180px);
+    }
+
+    .layer-stars-near {
       transform: translateZ(-120px);
     }
 
-    .layer-stars {
-      transform: translateZ(-80px);
-    }
-
     .layer-icons {
-      transform: translateZ(-30px);
+      transform: translateZ(30px);
       display: grid;
       grid-template-columns: repeat(6, 1fr);
       grid-template-rows: repeat(4, 1fr);
@@ -59,11 +67,10 @@
     }
 
     .layer-dock {
-      transform: translateZ(-10px);
       top: auto;
       bottom: 16px;
       left: 50%;
-      transform: translateZ(-10px) translateX(-50%);
+      transform: translateZ(15px) translateX(-50%);
       width: auto;
       height: auto;
       display: flex;
@@ -91,11 +98,11 @@
     /* --- Wallpaper --- */
 
     .wallpaper {
-      width: 120%;
-      height: 120%;
+      width: 160%;
+      height: 160%;
       position: absolute;
-      top: -10%;
-      left: -10%;
+      top: -30%;
+      left: -30%;
       background: linear-gradient(
         160deg,
         #0a1628 0%,
@@ -122,11 +129,11 @@
     /* --- Stars layer --- */
 
     .stars {
-      width: 110%;
-      height: 110%;
+      width: 150%;
+      height: 150%;
       position: absolute;
-      top: -5%;
-      left: -5%;
+      top: -25%;
+      left: -25%;
     }
 
     .star {
@@ -251,9 +258,15 @@
       <div class="wallpaper"></div>
     </div>
 
-    <!-- Stars — behind icons -->
-    <div class="layer layer-stars">
-      <div class="stars" id="stars"></div>
+    <!-- Stars — three depth layers for rich parallax -->
+    <div class="layer layer-stars-far">
+      <div class="stars" id="stars-far"></div>
+    </div>
+    <div class="layer layer-stars-mid">
+      <div class="stars" id="stars-mid"></div>
+    </div>
+    <div class="layer layer-stars-near">
+      <div class="stars" id="stars-near"></div>
     </div>
 
     <!-- App icons — mid depth -->

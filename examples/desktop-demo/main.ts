@@ -13,17 +13,26 @@ const statusEl = document.getElementById('status')!;
 const startBtn = document.getElementById('start-btn')!;
 const clockEl = document.getElementById('clock')!;
 
-// --- Generate stars ---
+// --- Generate stars across three depth layers ---
 
-const starsContainer = document.getElementById('stars')!;
-for (let i = 0; i < 80; i++) {
-  const star = document.createElement('div');
-  star.className = i % 8 === 0 ? 'star bright' : 'star';
-  star.style.left = `${Math.random() * 100}%`;
-  star.style.top = `${Math.random() * 100}%`;
-  star.style.opacity = `${0.2 + Math.random() * 0.6}`;
-  starsContainer.appendChild(star);
+function populateStars(containerId: string, count: number, brightChance: number) {
+  const el = document.getElementById(containerId)!;
+  for (let i = 0; i < count; i++) {
+    const star = document.createElement('div');
+    star.className = Math.random() < brightChance ? 'star bright' : 'star';
+    star.style.left = `${Math.random() * 100}%`;
+    star.style.top = `${Math.random() * 100}%`;
+    star.style.opacity = `${0.15 + Math.random() * 0.7}`;
+    el.appendChild(star);
+  }
 }
+
+// Far layer: many dim stars
+populateStars('stars-far', 120, 0.05);
+// Mid layer: moderate stars, some bright
+populateStars('stars-mid', 80, 0.12);
+// Near layer: fewer but brighter
+populateStars('stars-near', 40, 0.25);
 
 // --- App icon definitions ---
 
