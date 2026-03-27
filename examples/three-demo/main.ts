@@ -182,6 +182,7 @@ const adapter = new ThreeJSAdapter({ camera, screen });
 
 const engine = new ParallaxEngine({
   adapter,
+  persist: true,
   tracking: { smoothing: 'one-euro' },
   onTrack: (pos: EyePosition) => {
     eyePosEl.textContent = `x: ${pos.x.toFixed(3)}, y: ${pos.y.toFixed(3)}, z: ${pos.z.toFixed(3)}`;

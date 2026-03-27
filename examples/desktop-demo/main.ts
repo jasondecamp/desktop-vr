@@ -275,6 +275,7 @@ setInterval(updateClock, 10000);
 const adapter = new CSSAdapter({ container, screen, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
   adapter,
+  persist: true,
   tracking: { smoothing: 'one-euro' },
   onTrack: () => { statusEl.textContent = 'tracking'; },
   onTrackingLost: () => { statusEl.textContent = 'face not detected'; },
