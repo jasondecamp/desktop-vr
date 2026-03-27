@@ -74,7 +74,7 @@ for (const app of apps) {
   const el = document.createElement('div');
   el.className = 'app-icon';
   el.innerHTML = `
-    <div class="icon" style="background: ${app.bg}">${app.emoji}</div>
+    <div class="icon" style="background: ${app.bg}"><span class="emoji">${app.emoji}</span></div>
     <div class="label">${app.name}</div>
   `;
   iconGrid.appendChild(el);
@@ -94,7 +94,7 @@ for (const app of dockApps) {
   const el = document.createElement('div');
   el.className = 'dock-icon';
   el.style.background = app.bg;
-  el.textContent = app.emoji;
+  el.innerHTML = `<span class="emoji">${app.emoji}</span>`;
   el.title = app.name;
   dock.appendChild(el);
 }
@@ -231,8 +231,11 @@ function renderShootingStar() {
 renderShootingStar();
 
 function scheduleNextShootingStar() {
-  const minDelay = 3 * 60 * 1000;
-  const maxDelay = 7 * 60 * 1000;
+  // TODO: restore to 3-7 minutes for production
+  // const minDelay = 3 * 60 * 1000;
+  // const maxDelay = 7 * 60 * 1000;
+  const minDelay = 25 * 1000;
+  const maxDelay = 35 * 1000;
   const delay = minDelay + Math.random() * (maxDelay - minDelay);
   setTimeout(() => {
     triggerShootingStar();
@@ -240,11 +243,11 @@ function scheduleNextShootingStar() {
   }, delay);
 }
 
-// First one sooner so it's testable (30-90 seconds)
+// First one after ~5 seconds for testing
 setTimeout(() => {
   triggerShootingStar();
   scheduleNextShootingStar();
-}, 30000 + Math.random() * 60000);
+}, 5000);
 
 // --- Clock ---
 
