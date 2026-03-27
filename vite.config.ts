@@ -7,6 +7,7 @@ export default defineConfig({
       entry: {
         index: resolve(__dirname, 'src/index.ts'),
         three: resolve(__dirname, 'src/three.ts'),
+        react: resolve(__dirname, 'src/react.ts'),
       },
       formats: ['es', 'cjs'],
     },
@@ -15,6 +16,8 @@ export default defineConfig({
         'three',
         /^three\//,
         '@mediapipe/tasks-vision',
+        'react',
+        'react/jsx-runtime',
       ],
     },
   },

@@ -32,9 +32,9 @@ npm install three
 
 ## Library Entry Points
 
-The library is split into two entry points to keep your bundle lean:
+The library is split into three entry points to keep your bundle lean:
 
-### `parallax-display` — Core (no Three.js dependency)
+### `parallax-display` — Core (no Three.js or React dependency)
 
 Includes the engine, CSS adapter, face tracking, projection math, filters, and the CalibrationPanel (DOM-only UI).
 
@@ -64,6 +64,18 @@ import {
   DiagnosticOverlay,
   GridRoom,
 } from 'parallax-display/three';
+```
+
+### `parallax-display/react` — React hooks
+
+Includes everything from core, plus React hooks for easy integration.
+
+```typescript
+import {
+  // Everything from core, plus:
+  useParallaxCSS,
+  useParallaxEngine,
+} from 'parallax-display/react';
 ```
 
 ## Integration Guide
@@ -309,50 +321,111 @@ window.addEventListener('resize', () => {
 });
 ```
 
-### React Integration
+### React — CSS Parallax
 
-Wrap the engine in a hook for React projects:
+The `useParallaxCSS` hook handles all setup, teardown, and resize for you:
 
-```typescript
-import { useEffect, useRef } from 'react';
-import { ParallaxEngine, CSSAdapter, screenFromViewport } from 'parallax-display';
+```tsx
+import { useRef } from 'react';
+import { useParallaxCSS } from 'parallax-display/react';
 
-function useParallaxCSS(containerRef: React.RefObject<HTMLElement>) {
-  const engineRef = useRef<ParallaxEngine | null>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const screen = screenFromViewport();
-    const adapter = new CSSAdapter({ container, screen });
-    const engine = new ParallaxEngine({ adapter });
-    engineRef.current = engine;
-
-    engine.start();
-
-    return () => {
-      engine.destroy();
-      engineRef.current = null;
-    };
-  }, [containerRef]);
-
-  return engineRef;
-}
-
-// Usage
-function MyComponent() {
-  const sceneRef = useRef<HTMLDivElement>(null);
-  useParallaxCSS(sceneRef);
+function ParallaxScene() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { tracking, eyePosition } = useParallaxCSS(containerRef, {
+    sensitivity: 1.2,
+    smoothing: 'one-euro',
+  });
 
   return (
-    <div ref={sceneRef}>
-      <div style={{ transform: 'translateZ(-100px)' }}>Background</div>
-      <div style={{ transform: 'translateZ(50px)' }}>Foreground</div>
+    <div ref={containerRef}>
+      <div style={{ transform: 'translateZ(-100px)' }}>Background layer</div>
+      <div style={{ transform: 'translateZ(0px)' }}>Screen plane</div>
+      <div style={{ transform: 'translateZ(80px)' }}>Foreground layer</div>
+      {tracking && <p>Tracking at z={eyePosition?.z.toFixed(2)}m</p>}
     </div>
   );
 }
 ```
+
+**`useParallaxCSS` options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `sensitivity` | `1.0` | CSS parallax intensity multiplier |
+| `ppi` | `96` | CSS pixels per physical inch |
+| `smoothing` | `'one-euro'` | Filter type |
+| `autoStart` | `true` | Start tracking on mount |
+| `onTrack` | — | Callback each frame with `EyePosition` |
+| `onTrackingLost` | — | Callback when face not detected |
+| `onScreenChange` | — | Callback when screen config changes |
+
+**Returns:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `engine` | `ParallaxEngine \| null` | Engine instance for advanced control |
+| `tracking` | `boolean` | Whether tracking is active |
+| `eyePosition` | `EyePosition \| null` | Current eye position (updates each frame) |
+| `start` | `() => Promise<void>` | Start tracking manually |
+| `stop` | `() => void` | Stop tracking |
+
+### React — Three.js Parallax
+
+For Three.js (works with `@react-three/fiber` or vanilla Three.js in React), use `useParallaxEngine` with a `ThreeJSAdapter`:
+
+```tsx
+import { useRef, useMemo, useEffect } from 'react';
+import { useParallaxEngine } from 'parallax-display/react';
+import { ThreeJSAdapter, CalibrationOverlay, screenFromViewport } from 'parallax-display/three';
+import * as THREE from 'three';
+
+function ThreeScene() {
+  const mountRef = useRef<HTMLDivElement>(null);
+
+  // Set up Three.js scene (once)
+  const { camera, renderer, scene } = useMemo(() => {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
+    const scene = new THREE.Scene();
+    return { camera, renderer, scene };
+  }, []);
+
+  const adapter = useMemo(
+    () => new ThreeJSAdapter({ camera, screen: screenFromViewport() }),
+    [camera],
+  );
+
+  const { tracking } = useParallaxEngine({ adapter });
+
+  useEffect(() => {
+    const el = mountRef.current;
+    if (!el) return;
+    renderer.setSize(innerWidth, innerHeight);
+    el.appendChild(renderer.domElement);
+
+    // Add your scene content
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0x44aaff }),
+    );
+    box.position.z = -0.10;
+    scene.add(box);
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    return () => { renderer.dispose(); };
+  }, [renderer, scene, camera]);
+
+  return <div ref={mountRef} />;
+}
+```
+
+**`useParallaxEngine` accepts** the same options as `ParallaxEngineConfig` plus `autoStart` (default: `true`). It returns the same `UseParallaxReturn` shape as `useParallaxCSS`.
 
 ## Architecture
 
@@ -523,8 +596,9 @@ Both can be tuned at runtime via the calibration panel or `engine.getFilter().up
 
 ```
 src/
-  index.ts                      # core entry point (no Three.js dependency)
+  index.ts                      # core entry point (no Three.js or React dependency)
   three.ts                      # Three.js entry point (re-exports core + adds Three.js deps)
+  react.ts                      # React hooks entry point (re-exports core + adds hooks)
   core/
     ParallaxEngine.ts           # orchestrator
   tracking/
@@ -595,8 +669,9 @@ Note: webcam tracking requires HTTPS. Most hosting providers (Vercel, Netlify, G
 **Required peer dependency:**
 - **[@mediapipe/tasks-vision](https://www.npmjs.com/package/@mediapipe/tasks-vision)** — face landmark detection
 
-**Optional peer dependency:**
-- **[three](https://www.npmjs.com/package/three)** — 3D rendering (only needed for `parallax-display/three` entry point)
+**Optional peer dependencies:**
+- **[three](https://www.npmjs.com/package/three)** — 3D rendering (only needed for `parallax-display/three`)
+- **[react](https://www.npmjs.com/package/react)** — React 18+ (only needed for `parallax-display/react`)
 
 ## License
 
