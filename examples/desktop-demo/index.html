@@ -35,6 +35,7 @@
       inset: 0;
       display: flex;
       pointer-events: none;
+      transform-style: preserve-3d;
     }
 
     .layer > * { pointer-events: auto; }
@@ -71,13 +72,13 @@
       bottom: 16px;
       left: 50%;
       transform: translateZ(0px) translateX(-50%);
+      transform-style: preserve-3d;
       width: auto;
       height: auto;
       display: flex;
       gap: 8px;
       padding: 10px 20px;
       background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: none; /* avoid breaking preserve-3d */
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 20px;
     }
