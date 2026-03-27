@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallax Display — Desktop</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* --- Scene container (perspective host) --- */
+
+    #scene {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      transform-style: preserve-3d;
+      overflow: visible;
+    }
+
+    /* --- Depth layers --- */
+
+    .layer {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      pointer-events: none;
+    }
+
+    .layer > * { pointer-events: auto; }
+
+    .layer-wallpaper {
+      transform: translateZ(-120px);
+    }
+
+    .layer-stars {
+      transform: translateZ(-80px);
+    }
+
+    .layer-icons {
+      transform: translateZ(-30px);
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      grid-template-rows: repeat(4, 1fr);
+      padding: 80px 60px 120px;
+      gap: 16px;
+      align-items: center;
+      justify-items: center;
+    }
+
+    .layer-dock {
+      transform: translateZ(-10px);
+      top: auto;
+      bottom: 16px;
+      left: 50%;
+      transform: translateZ(-10px) translateX(-50%);
+      width: auto;
+      height: auto;
+      display: flex;
+      gap: 8px;
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: none; /* avoid breaking preserve-3d */
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+    }
+
+    .layer-status {
+      transform: translateZ(0px);
+      bottom: auto;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* --- Wallpaper --- */
+
+    .wallpaper {
+      width: 120%;
+      height: 120%;
+      position: absolute;
+      top: -10%;
+      left: -10%;
+      background: linear-gradient(
+        160deg,
+        #0a1628 0%,
+        #142744 20%,
+        #1a3a5c 40%,
+        #2a4a6e 55%,
+        #1a3050 70%,
+        #142240 85%,
+        #0a1628 100%
+      );
+    }
+
+    /* Aurora/gradient overlay */
+    .wallpaper::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 30% 20%, rgba(80, 140, 200, 0.2) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 40%, rgba(120, 80, 180, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(40, 100, 140, 0.1) 0%, transparent 50%);
+    }
+
+    /* --- Stars layer --- */
+
+    .stars {
+      width: 110%;
+      height: 110%;
+      position: absolute;
+      top: -5%;
+      left: -5%;
+    }
+
+    .star {
+      position: absolute;
+      width: 2px;
+      height: 2px;
+      background: #fff;
+      border-radius: 50%;
+    }
+
+    .star.bright {
+      width: 3px;
+      height: 3px;
+      box-shadow: 0 0 4px rgba(180, 200, 255, 0.6);
+    }
+
+    /* --- App icons --- */
+
+    .app-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+      position: relative;
+    }
+
+    .app-icon:hover {
+      transform: scale(1.1);
+    }
+
+    .app-icon .icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .app-icon .label {
+      font-size: 11px;
+      margin-top: 5px;
+      color: rgba(255, 255, 255, 0.85);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    /* --- Dock icons --- */
+
+    .dock-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    .dock-icon:hover {
+      transform: scale(1.15) translateY(-4px);
+    }
+
+    /* --- Status bar --- */
+
+    .status-left, .status-right {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+
+    /* --- Start button overlay --- */
+
+    #start-btn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      font-size: 18px;
+      padding: 16px 32px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      background: rgba(10, 20, 40, 0.85);
+      color: #7ec8e3;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #start-btn:hover { background: rgba(20, 40, 70, 0.9); }
+
+    #status-overlay {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.4);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-overlay">
+    <span id="status">not started</span>
+  </div>
+  <button id="start-btn">Enable Head Tracking</button>
+
+  <div id="scene">
+    <!-- Wallpaper — deepest layer -->
+    <div class="layer layer-wallpaper">
+      <div class="wallpaper"></div>
+    </div>
+
+    <!-- Stars — behind icons -->
+    <div class="layer layer-stars">
+      <div class="stars" id="stars"></div>
+    </div>
+
+    <!-- App icons — mid depth -->
+    <div class="layer layer-icons" id="icon-grid">
+      <!-- populated by JS -->
+    </div>
+
+    <!-- Dock — near the screen plane -->
+    <div class="layer layer-dock" id="dock">
+      <!-- populated by JS -->
+    </div>
+
+    <!-- Status bar — at the screen plane -->
+    <div class="layer layer-status">
+      <div class="status-left">
+        <span id="clock"></span>
+      </div>
+      <div class="status-right">
+        <span>Wi-Fi</span>
+        <span id="battery">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
