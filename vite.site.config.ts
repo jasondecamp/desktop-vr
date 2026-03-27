@@ -13,6 +13,7 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         three: resolve(__dirname, 'examples/three-demo/index.html'),
         css: resolve(__dirname, 'examples/css-demo/index.html'),
+        aquarium: resolve(__dirname, 'examples/aquarium-demo/index.html'),
       },
     },
   },
