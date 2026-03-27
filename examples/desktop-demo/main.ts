@@ -99,60 +99,138 @@ for (const app of dockApps) {
   dock.appendChild(el);
 }
 
-// --- Shooting star (rare easter egg) ---
+// --- Shooting star (rare easter egg, canvas-based) ---
 
-const shootingStar = document.getElementById('shooting-star')!;
+const shootingCanvas = document.getElementById('shooting-canvas') as HTMLCanvasElement;
+const shootCtx = shootingCanvas.getContext('2d')!;
+
+function resizeShootingCanvas() {
+  shootingCanvas.width = window.innerWidth;
+  shootingCanvas.height = window.innerHeight;
+}
+resizeShootingCanvas();
+
+// Trail: array of past positions with timestamps
+interface TrailPoint { x: number; y: number; time: number }
+
+let shootingActive = false;
+let trailPoints: TrailPoint[] = [];
+let trailFadeStart = 0;
+
+const TRAIL_LIFETIME = 3000; // trail fades over 3 seconds after star finishes
+const SHOOT_DURATION_MIN = 500;
+const SHOOT_DURATION_MAX = 900;
 
 function triggerShootingStar() {
-  // Random start position (top half of screen, either side)
-  const startX = Math.random() * 80 + 10; // 10-90%
-  const startY = Math.random() * 40;       // 0-40%
+  const w = shootingCanvas.width;
+  const h = shootingCanvas.height;
 
-  // Random angle: mostly diagonal downward, with some variety
-  const angle = 20 + Math.random() * 40;   // 20-60 degrees from horizontal
-  const direction = Math.random() > 0.5 ? 1 : -1; // left-to-right or right-to-left
-  const distance = 30 + Math.random() * 30; // 30-60% of screen travel
+  // Random start: top portion of screen
+  const startX = Math.random() * w;
+  const startY = Math.random() * h * 0.3;
 
-  const radians = (angle * Math.PI) / 180;
-  const endX = startX + direction * Math.cos(radians) * distance;
-  const endY = startY + Math.sin(radians) * distance;
+  // Random angle and direction
+  const angle = (15 + Math.random() * 45) * (Math.PI / 180);
+  const direction = Math.random() > 0.5 ? 1 : -1;
+  const travelDist = (0.3 + Math.random() * 0.4) * Math.max(w, h);
 
-  // Rotate the element to match the travel direction
-  const rotDeg = direction > 0 ? angle : 180 - angle;
+  const dx = direction * Math.cos(angle) * travelDist;
+  const dy = Math.sin(angle) * travelDist;
+  const endX = startX + dx;
+  const endY = startY + dy;
 
-  shootingStar.style.left = `${startX}%`;
-  shootingStar.style.top = `${startY}%`;
-  shootingStar.style.transform = `rotate(${rotDeg}deg)`;
-  shootingStar.className = 'shooting-star active';
-
-  // Animate across the sky
-  const duration = 600 + Math.random() * 400; // 600-1000ms
+  const duration = SHOOT_DURATION_MIN + Math.random() * (SHOOT_DURATION_MAX - SHOOT_DURATION_MIN);
   const startTime = performance.now();
+
+  shootingActive = true;
+  trailPoints = [];
+  trailFadeStart = 0;
 
   function animateShoot(now: number) {
     const t = Math.min(1, (now - startTime) / duration);
-    const eased = t; // linear for a streak feel
-    const cx = startX + (endX - startX) * eased;
-    const cy = startY + (endY - startY) * eased;
-    shootingStar.style.left = `${cx}%`;
-    shootingStar.style.top = `${cy}%`;
+    const cx = startX + (endX - startX) * t;
+    const cy = startY + (endY - startY) * t;
+
+    trailPoints.push({ x: cx, y: cy, time: now });
 
     if (t < 1) {
       requestAnimationFrame(animateShoot);
     } else {
-      // Fade out
-      shootingStar.className = 'shooting-star fading';
-      setTimeout(() => {
-        shootingStar.className = 'shooting-star';
-      }, 500);
+      // Star finished moving — begin trail fade
+      shootingActive = false;
+      trailFadeStart = now;
     }
   }
 
   requestAnimationFrame(animateShoot);
 }
 
+// Render loop for the shooting star canvas
+function renderShootingStar() {
+  requestAnimationFrame(renderShootingStar);
+
+  shootCtx.clearRect(0, 0, shootingCanvas.width, shootingCanvas.height);
+
+  if (trailPoints.length === 0) return;
+
+  const now = performance.now();
+
+  // If trail is fading, compute global fade
+  let globalAlpha = 1;
+  if (trailFadeStart > 0) {
+    const elapsed = now - trailFadeStart;
+    globalAlpha = Math.max(0, 1 - elapsed / TRAIL_LIFETIME);
+    if (globalAlpha <= 0) {
+      trailPoints = [];
+      trailFadeStart = 0;
+      return;
+    }
+  }
+
+  // Draw the trail as a gradient line from oldest (transparent) to newest (bright)
+  const len = trailPoints.length;
+  if (len < 2) return;
+
+  shootCtx.lineCap = 'round';
+
+  for (let i = 1; i < len; i++) {
+    const prev = trailPoints[i - 1];
+    const curr = trailPoints[i];
+
+    // Position along the trail: 0 = oldest, 1 = newest
+    const trailT = i / (len - 1);
+
+    // Trail fades from transparent at the tail to bright at the head
+    const alpha = trailT * trailT * 0.8 * globalAlpha;
+    const width = 0.5 + trailT * 2;
+
+    shootCtx.beginPath();
+    shootCtx.moveTo(prev.x, prev.y);
+    shootCtx.lineTo(curr.x, curr.y);
+    shootCtx.strokeStyle = `rgba(200, 220, 255, ${alpha})`;
+    shootCtx.lineWidth = width;
+    shootCtx.stroke();
+  }
+
+  // Bright head dot (only while actively moving)
+  if (shootingActive) {
+    const head = trailPoints[len - 1];
+    shootCtx.beginPath();
+    shootCtx.arc(head.x, head.y, 2.5, 0, Math.PI * 2);
+    shootCtx.fillStyle = `rgba(255, 255, 255, ${0.9 * globalAlpha})`;
+    shootCtx.fill();
+
+    // Glow
+    shootCtx.beginPath();
+    shootCtx.arc(head.x, head.y, 6, 0, Math.PI * 2);
+    shootCtx.fillStyle = `rgba(180, 210, 255, ${0.3 * globalAlpha})`;
+    shootCtx.fill();
+  }
+}
+
+renderShootingStar();
+
 function scheduleNextShootingStar() {
-  // Average every 5 minutes, but random between 3-7 minutes
   const minDelay = 3 * 60 * 1000;
   const maxDelay = 7 * 60 * 1000;
   const delay = minDelay + Math.random() * (maxDelay - minDelay);
@@ -205,4 +283,5 @@ startBtn.addEventListener('click', async () => {
 
 window.addEventListener('resize', () => {
   engine.updateScreenFromViewport();
+  resizeShootingCanvas();
 });
