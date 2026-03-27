@@ -125,19 +125,32 @@ function triggerShootingStar() {
   const w = shootingCanvas.width;
   const h = shootingCanvas.height;
 
-  // Random start: top portion of screen
-  const startX = Math.random() * w;
-  const startY = Math.random() * h * 0.3;
+  // Pick a random angle (15-50 degrees below horizontal)
+  const angle = (15 + Math.random() * 35) * (Math.PI / 180);
+  const goingRight = Math.random() > 0.5;
 
-  // Random angle and direction
-  const angle = (15 + Math.random() * 45) * (Math.PI / 180);
-  const direction = Math.random() > 0.5 ? 1 : -1;
-  const travelDist = (0.3 + Math.random() * 0.4) * Math.max(w, h);
+  // Start just outside one edge, end just outside the opposite edge.
+  // This guarantees the star crosses the full field of view.
+  let startX: number, startY: number, endX: number, endY: number;
 
-  const dx = direction * Math.cos(angle) * travelDist;
-  const dy = Math.sin(angle) * travelDist;
-  const endX = startX + dx;
-  const endY = startY + dy;
+  if (goingRight) {
+    // Enter from the left edge
+    startX = -20;
+    startY = Math.random() * h * 0.4;
+    // Travel right and down until past the right edge
+    const dx = w + 40;
+    const dy = dx * Math.tan(angle);
+    endX = startX + dx;
+    endY = startY + dy;
+  } else {
+    // Enter from the right edge
+    startX = w + 20;
+    startY = Math.random() * h * 0.4;
+    const dx = w + 40;
+    const dy = dx * Math.tan(angle);
+    endX = startX - dx;
+    endY = startY + dy;
+  }
 
   const duration = SHOOT_DURATION_MIN + Math.random() * (SHOOT_DURATION_MAX - SHOOT_DURATION_MIN);
   const startTime = performance.now();
