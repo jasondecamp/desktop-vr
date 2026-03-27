@@ -187,30 +187,29 @@ function renderShootingStar() {
     }
   }
 
-  // Draw the trail as a gradient line from oldest (transparent) to newest (bright)
+  // Draw the trail as a single continuous path with a gradient stroke
   const len = trailPoints.length;
   if (len < 2) return;
 
-  shootCtx.lineCap = 'round';
+  const tail = trailPoints[0];
+  const head = trailPoints[len - 1];
 
+  // Create gradient along the trail direction
+  const grad = shootCtx.createLinearGradient(tail.x, tail.y, head.x, head.y);
+  grad.addColorStop(0, `rgba(200, 220, 255, 0)`);
+  grad.addColorStop(0.5, `rgba(200, 220, 255, ${0.3 * globalAlpha})`);
+  grad.addColorStop(1, `rgba(200, 220, 255, ${0.8 * globalAlpha})`);
+
+  shootCtx.beginPath();
+  shootCtx.moveTo(trailPoints[0].x, trailPoints[0].y);
   for (let i = 1; i < len; i++) {
-    const prev = trailPoints[i - 1];
-    const curr = trailPoints[i];
-
-    // Position along the trail: 0 = oldest, 1 = newest
-    const trailT = i / (len - 1);
-
-    // Trail fades from transparent at the tail to bright at the head
-    const alpha = trailT * trailT * 0.8 * globalAlpha;
-    const width = 0.5 + trailT * 2;
-
-    shootCtx.beginPath();
-    shootCtx.moveTo(prev.x, prev.y);
-    shootCtx.lineTo(curr.x, curr.y);
-    shootCtx.strokeStyle = `rgba(200, 220, 255, ${alpha})`;
-    shootCtx.lineWidth = width;
-    shootCtx.stroke();
+    shootCtx.lineTo(trailPoints[i].x, trailPoints[i].y);
   }
+  shootCtx.strokeStyle = grad;
+  shootCtx.lineWidth = 1.5;
+  shootCtx.lineCap = 'round';
+  shootCtx.lineJoin = 'round';
+  shootCtx.stroke();
 
   // Bright head dot (only while actively moving)
   if (shootingActive) {
