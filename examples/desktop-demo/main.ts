@@ -99,6 +99,75 @@ for (const app of dockApps) {
   dock.appendChild(el);
 }
 
+// --- Shooting star (rare easter egg) ---
+
+const shootingStar = document.getElementById('shooting-star')!;
+
+function triggerShootingStar() {
+  // Random start position (top half of screen, either side)
+  const startX = Math.random() * 80 + 10; // 10-90%
+  const startY = Math.random() * 40;       // 0-40%
+
+  // Random angle: mostly diagonal downward, with some variety
+  const angle = 20 + Math.random() * 40;   // 20-60 degrees from horizontal
+  const direction = Math.random() > 0.5 ? 1 : -1; // left-to-right or right-to-left
+  const distance = 30 + Math.random() * 30; // 30-60% of screen travel
+
+  const radians = (angle * Math.PI) / 180;
+  const endX = startX + direction * Math.cos(radians) * distance;
+  const endY = startY + Math.sin(radians) * distance;
+
+  // Rotate the element to match the travel direction
+  const rotDeg = direction > 0 ? angle : 180 - angle;
+
+  shootingStar.style.left = `${startX}%`;
+  shootingStar.style.top = `${startY}%`;
+  shootingStar.style.transform = `rotate(${rotDeg}deg)`;
+  shootingStar.className = 'shooting-star active';
+
+  // Animate across the sky
+  const duration = 600 + Math.random() * 400; // 600-1000ms
+  const startTime = performance.now();
+
+  function animateShoot(now: number) {
+    const t = Math.min(1, (now - startTime) / duration);
+    const eased = t; // linear for a streak feel
+    const cx = startX + (endX - startX) * eased;
+    const cy = startY + (endY - startY) * eased;
+    shootingStar.style.left = `${cx}%`;
+    shootingStar.style.top = `${cy}%`;
+
+    if (t < 1) {
+      requestAnimationFrame(animateShoot);
+    } else {
+      // Fade out
+      shootingStar.className = 'shooting-star fading';
+      setTimeout(() => {
+        shootingStar.className = 'shooting-star';
+      }, 500);
+    }
+  }
+
+  requestAnimationFrame(animateShoot);
+}
+
+function scheduleNextShootingStar() {
+  // Average every 5 minutes, but random between 3-7 minutes
+  const minDelay = 3 * 60 * 1000;
+  const maxDelay = 7 * 60 * 1000;
+  const delay = minDelay + Math.random() * (maxDelay - minDelay);
+  setTimeout(() => {
+    triggerShootingStar();
+    scheduleNextShootingStar();
+  }, delay);
+}
+
+// First one sooner so it's testable (30-90 seconds)
+setTimeout(() => {
+  triggerShootingStar();
+  scheduleNextShootingStar();
+}, 30000 + Math.random() * 60000);
+
 // --- Clock ---
 
 function updateClock() {

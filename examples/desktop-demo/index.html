@@ -56,7 +56,7 @@
     }
 
     .layer-icons {
-      transform: translateZ(30px);
+      transform: translateZ(150px);
       display: grid;
       grid-template-columns: repeat(6, 1fr);
       grid-template-rows: repeat(4, 1fr);
@@ -70,7 +70,7 @@
       top: auto;
       bottom: 16px;
       left: 50%;
-      transform: translateZ(15px) translateX(-50%);
+      transform: translateZ(120px) translateX(-50%);
       width: auto;
       height: auto;
       display: flex;
@@ -148,6 +148,45 @@
       width: 3px;
       height: 3px;
       box-shadow: 0 0 4px rgba(180, 200, 255, 0.6);
+    }
+
+    /* --- Shooting star --- */
+
+    .layer-shooting {
+      transform: translateZ(-200px);
+    }
+
+    .shooting-star {
+      position: absolute;
+      width: 3px;
+      height: 3px;
+      background: #fff;
+      border-radius: 50%;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 0 6px rgba(200, 220, 255, 0.8);
+    }
+
+    .shooting-star::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      right: 100%;
+      transform: translateY(-50%);
+      width: 80px;
+      height: 1.5px;
+      background: linear-gradient(to left, rgba(200, 220, 255, 0.7), transparent);
+      border-radius: 1px;
+    }
+
+    .shooting-star.active {
+      opacity: 1;
+      transition: none;
+    }
+
+    .shooting-star.fading {
+      opacity: 0;
+      transition: opacity 0.4s ease-out;
     }
 
     /* --- App icons --- */
@@ -256,6 +295,11 @@
     <!-- Wallpaper — deepest layer -->
     <div class="layer layer-wallpaper">
       <div class="wallpaper"></div>
+    </div>
+
+    <!-- Shooting star layer -->
+    <div class="layer layer-shooting">
+      <div class="shooting-star" id="shooting-star"></div>
     </div>
 
     <!-- Stars — three depth layers for rich parallax -->
