@@ -195,6 +195,7 @@
     .app-icon .icon .emoji {
       transform: translateZ(12px);
       display: block;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
     }
 
     .app-icon .label {
@@ -219,17 +220,18 @@
       cursor: pointer;
       transition: transform 0.15s ease;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      transform: translateZ(10px);
+      transform: translateZ(5px);
       transform-style: preserve-3d;
     }
 
     .dock-icon .emoji {
-      transform: translateZ(5px);
+      transform: translateZ(3px);
       display: block;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
     }
 
     .dock-icon:hover {
-      transform: translateZ(10px) scale(1.15) translateY(-4px);
+      transform: translateZ(5px) scale(1.15) translateY(-4px);
     }
 
     /* --- Status bar --- */
