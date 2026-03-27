@@ -20,14 +20,17 @@ npm install parallax-display
 
 ### Peer Dependencies
 
-The library requires `@mediapipe/tasks-vision` for face tracking. Three.js is optional — only needed if you use the Three.js adapter or UI overlays.
+The library requires `@mediapipe/tasks-vision` for face tracking. Three.js and React are optional depending on which entry points you use.
 
 ```bash
 # Required
 npm install @mediapipe/tasks-vision
 
-# Optional (only for Three.js mode)
+# Optional (only for parallax-display/three)
 npm install three
+
+# Optional (only for parallax-display/react)
+npm install react
 ```
 
 ## Library Entry Points
