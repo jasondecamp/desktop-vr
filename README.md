@@ -12,49 +12,108 @@ Two rendering backends are supported:
 - **Three.js** — full 3D scenes with geometric depth and off-axis projection
 - **CSS 3D Transforms** — lightweight depth layers for web UIs using `perspective` and `translateZ()`
 
-## Quick Start
+## Installation
 
 ```bash
-npm install
-npm run dev
+npm install parallax-display
 ```
 
-The dev server opens the Three.js demo. Click "Start" to grant camera access. The calibration overlay launches automatically.
+### Peer Dependencies
 
-### Keyboard Shortcuts
+The library requires `@mediapipe/tasks-vision` for face tracking. Three.js is optional — only needed if you use the Three.js adapter or UI overlays.
 
-| Key | Function |
-|-----|----------|
-| `` ` `` | Toggle calibration panel |
-| `c` | Open calibration overlay |
-| `d` | Open diagnostic overlay |
-| `Enter` | Advance calibration step |
-| `Escape` | Skip/close overlay |
+```bash
+# Required
+npm install @mediapipe/tasks-vision
 
-## Usage
+# Optional (only for Three.js mode)
+npm install three
+```
 
-### Three.js
+## Library Entry Points
+
+The library is split into two entry points to keep your bundle lean:
+
+### `parallax-display` — Core (no Three.js dependency)
+
+Includes the engine, CSS adapter, face tracking, projection math, filters, and the CalibrationPanel (DOM-only UI).
 
 ```typescript
-import { ParallaxEngine, ThreeJSAdapter, screenFromViewport } from 'parallax-display';
-
-const screen = screenFromViewport(); // auto-compute from viewport
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
-const adapter = new ThreeJSAdapter({ camera, screen });
-
-const engine = new ParallaxEngine({
-  adapter,
-  onTrack: (pos) => { /* pos.x, pos.y, pos.z in meters */ },
-});
-
-await engine.start();
-
-// Scene setup: z=0 is the screen plane
-// Negative z = behind the screen (recedes into display)
-// Positive z = in front of the screen (pops out toward viewer)
+import {
+  ParallaxEngine,
+  CSSAdapter,
+  CalibrationPanel,
+  FaceTracker,
+  CoordinateMapper,
+  OneEuroFilter,
+  EMAFilter,
+  computeOffAxisFrustum,
+  screenFromViewport,
+} from 'parallax-display';
 ```
 
-### CSS 3D
+### `parallax-display/three` — Three.js adapter + UI overlays
+
+Includes everything from core, plus the Three.js adapter and all Three.js-dependent UI components (CalibrationOverlay, DiagnosticOverlay, GridRoom).
+
+```typescript
+import {
+  // Everything from core, plus:
+  ThreeJSAdapter,
+  CalibrationOverlay,
+  DiagnosticOverlay,
+  GridRoom,
+} from 'parallax-display/three';
+```
+
+## Integration Guide
+
+### Minimal Three.js Setup
+
+Add head-tracked parallax to any Three.js scene in ~10 lines:
+
+```typescript
+import * as THREE from 'three';
+import { ParallaxEngine, ThreeJSAdapter, screenFromViewport } from 'parallax-display/three';
+
+// Your existing Three.js scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
+
+// Add parallax — screen dimensions auto-computed from viewport
+const screen = screenFromViewport();
+const adapter = new ThreeJSAdapter({ camera, screen });
+const engine = new ParallaxEngine({ adapter });
+
+await engine.start(); // requests camera permission
+
+// Your render loop — no changes needed, the engine updates the camera automatically
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+// Handle resize
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  engine.updateScreenFromViewport();
+});
+```
+
+**Scene coordinate system:**
+- `z = 0` is the screen plane
+- Negative z = behind the screen (recedes into display)
+- Positive z = in front of the screen (pops out toward viewer)
+
+### Minimal CSS Setup
+
+Add depth to any webpage without Three.js:
 
 ```typescript
 import { ParallaxEngine, CSSAdapter, screenFromViewport } from 'parallax-display';
@@ -62,12 +121,12 @@ import { ParallaxEngine, CSSAdapter, screenFromViewport } from 'parallax-display
 const screen = screenFromViewport();
 const container = document.getElementById('scene');
 const adapter = new CSSAdapter({ container, screen });
-
 const engine = new ParallaxEngine({ adapter });
+
 await engine.start();
 ```
 
-Child elements use `transform: translateZ()` for depth:
+Child elements use `transform: translateZ()` for depth layers:
 
 ```html
 <div id="scene">
@@ -75,6 +134,224 @@ Child elements use `transform: translateZ()` for depth:
   <div style="transform: translateZ(0px)">At screen plane</div>
   <div style="transform: translateZ(100px)">Pops forward</div>
 </div>
+```
+
+**Important CSS notes:**
+- The container needs `transform-style: preserve-3d` (the adapter sets this automatically)
+- Avoid `backdrop-filter` and `opacity` on depth-layered children — they break `preserve-3d` z-sorting
+- Use alpha in colors instead of `opacity`, and solid backgrounds instead of `backdrop-filter: blur()`
+
+### Adding Calibration
+
+The calibration overlay guides users through a two-step process to establish their natural viewing position:
+
+```typescript
+import {
+  ParallaxEngine, ThreeJSAdapter, CalibrationOverlay, screenFromViewport,
+} from 'parallax-display/three';
+
+const screen = screenFromViewport();
+const adapter = new ThreeJSAdapter({ camera, screen });
+const engine = new ParallaxEngine({ adapter });
+
+// Auto-launches after engine.start(), re-invokable with 'c' key
+const calibration = new CalibrationOverlay({
+  engine,
+  autoStart: true,       // launch automatically (default)
+  triggerKey: 'c',       // re-open with this key (default)
+  onComplete: (offset) => console.log('Calibrated:', offset),
+  onDismiss: () => {
+    // Show your scene after calibration closes (complete or skipped)
+    renderer.domElement.style.visibility = 'visible';
+  },
+});
+
+await engine.start();
+```
+
+### Adding the Calibration Panel
+
+A collapsible side panel with live controls, camera preview with landmark visualization, and a PPI ruler:
+
+```typescript
+import { CalibrationPanel } from 'parallax-display';
+
+const panel = new CalibrationPanel({
+  engine,
+  toggleKey: '`',         // backtick to toggle (default)
+  startCollapsed: true,   // start hidden (default: false)
+});
+```
+
+The panel provides runtime controls for:
+- **PPI calibration** — drag a ruler to match 1 inch on your physical screen
+- **Screen dimensions** — auto-computed from viewport, manually adjustable
+- **Camera settings** — FOV, Y offset, IPD, mirror
+- **Smoothing** — switch filter type and tune parameters
+- **Camera preview** — live feed with tracked landmark annotations
+
+### Adding Diagnostics
+
+Verify tracking accuracy with three built-in tests:
+
+```typescript
+import { DiagnosticOverlay } from 'parallax-display/three';
+
+const diagnostics = new DiagnosticOverlay({
+  engine,
+  triggerKey: 'd',  // default
+});
+```
+
+Press `d` to open. Three tests:
+- **Z Distance** — compare tracked distance to a tape measure
+- **Screen-Plane Stability** — crosshair at z=0 should be motionless (drift meter shows pixel drift)
+- **PPI Check** — 1-inch reference square to verify with a ruler
+
+### Adding a Grid Room Background
+
+A viewport-anchored grid room that creates the "looking into a box" effect:
+
+```typescript
+import { GridRoom, screenFromViewport } from 'parallax-display/three';
+
+const screen = screenFromViewport();
+const room = new GridRoom(screen, {
+  depth: 0.60,           // how far back the grid extends (meters)
+  gridSpacing: 0.053,    // distance between grid lines
+  lineWidth: 1.5,        // line weight in pixels
+  showBackWall: false,    // open-ended or closed box
+  wallStyle: 'grid',     // 'grid' (wireframe) or 'solid' (lit mesh)
+});
+scene.add(room.getGroup());
+
+// On resize — rebuild to match new viewport edges
+window.addEventListener('resize', () => {
+  room.updateScreen(engine.getScreenConfig());
+  room.updateResolution();
+});
+
+// When PPI or screen changes at runtime
+const engine = new ParallaxEngine({
+  adapter,
+  onScreenChange: (s) => room.updateScreen(s),
+});
+```
+
+### Full Integration Example
+
+Putting it all together — a complete Three.js app with all amenities:
+
+```typescript
+import * as THREE from 'three';
+import {
+  ParallaxEngine, ThreeJSAdapter, CalibrationPanel,
+  CalibrationOverlay, DiagnosticOverlay, GridRoom, screenFromViewport,
+} from 'parallax-display/three';
+
+// Scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.domElement.style.visibility = 'hidden'; // hide until calibrated
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
+
+// Grid room
+const screen = screenFromViewport();
+const room = new GridRoom(screen, { depth: 0.60, gridSpacing: 0.053 });
+scene.add(room.getGroup());
+
+// Lighting
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+// Add your scene content here (z=0 is the screen plane)
+const box = new THREE.Mesh(
+  new THREE.BoxGeometry(0.05, 0.05, 0.05),
+  new THREE.MeshStandardMaterial({ color: 0x44aaff }),
+);
+box.position.set(0, 0, -0.10); // 10cm behind screen
+scene.add(box);
+
+// Engine — auto-computes screen from viewport
+const adapter = new ThreeJSAdapter({ camera, screen });
+const engine = new ParallaxEngine({
+  adapter,
+  onScreenChange: (s) => room.updateScreen(s),
+});
+
+// UI
+new CalibrationPanel({ engine, startCollapsed: true });
+new CalibrationOverlay({
+  engine,
+  onDismiss: () => { renderer.domElement.style.visibility = 'visible'; },
+});
+new DiagnosticOverlay({ engine });
+
+// Start
+await engine.start();
+
+// Render loop
+(function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+})();
+
+// Resize
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  engine.updateScreenFromViewport();
+  room.rebuild();
+  room.updateResolution();
+});
+```
+
+### React Integration
+
+Wrap the engine in a hook for React projects:
+
+```typescript
+import { useEffect, useRef } from 'react';
+import { ParallaxEngine, CSSAdapter, screenFromViewport } from 'parallax-display';
+
+function useParallaxCSS(containerRef: React.RefObject<HTMLElement>) {
+  const engineRef = useRef<ParallaxEngine | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const screen = screenFromViewport();
+    const adapter = new CSSAdapter({ container, screen });
+    const engine = new ParallaxEngine({ adapter });
+    engineRef.current = engine;
+
+    engine.start();
+
+    return () => {
+      engine.destroy();
+      engineRef.current = null;
+    };
+  }, [containerRef]);
+
+  return engineRef;
+}
+
+// Usage
+function MyComponent() {
+  const sceneRef = useRef<HTMLDivElement>(null);
+  useParallaxCSS(sceneRef);
+
+  return (
+    <div ref={sceneRef}>
+      <div style={{ transform: 'translateZ(-100px)' }}>Background</div>
+      <div style={{ transform: 'translateZ(50px)' }}>Foreground</div>
+    </div>
+  );
+}
 ```
 
 ## Architecture
@@ -155,8 +432,12 @@ interface ParallaxEngineConfig {
 | `getEyePosition()` | Current adjusted eye position |
 | `getRawEyePosition()` | Position before offset applied |
 | `getRawFaceData()` | All tracked landmarks + blink state |
+| `getScreenConfig()` | Current physical screen dimensions |
+| `getAdapter()` | The active adapter instance |
+| `getFilter()` | The active smoothing filter instance |
+| `getPpi()` | Current PPI value |
 
-### EyePosition
+### Types
 
 ```typescript
 interface EyePosition {
@@ -164,20 +445,12 @@ interface EyePosition {
   y: number;  // meters, positive = above screen center
   z: number;  // meters, distance from screen (always positive)
 }
-```
 
-### ScreenConfig
-
-```typescript
 interface ScreenConfig {
-  widthMeters: number;   // physical viewport width
-  heightMeters: number;  // physical viewport height
+  widthMeters: number;   // physical viewport width in meters
+  heightMeters: number;  // physical viewport height in meters
 }
-```
 
-### CalibrationConfig
-
-```typescript
 interface CalibrationConfig {
   realIPD: number;           // inter-pupillary distance (default: 0.063m)
   cameraFovDegrees: number;  // webcam horizontal FOV (default: 60)
@@ -192,7 +465,7 @@ interface CalibrationConfig {
 function screenFromViewport(ppi?: number): ScreenConfig
 ```
 
-Computes physical screen dimensions from `window.innerWidth/Height` divided by PPI, converted to meters. Default PPI is 96 (CSS standard).
+Computes physical screen dimensions from `window.innerWidth/Height` divided by PPI, converted to meters. Default PPI is 96 (CSS standard). Use the calibration panel's ruler tool for accurate PPI.
 
 ### Adapters
 
@@ -203,35 +476,37 @@ update(eye: EyePosition): void
 updateScreen(screen: ScreenConfig): void
 ```
 
-**ThreeJSAdapter** additionally takes `near`/`far` clipping planes.
-**CSSAdapter** additionally has `setSensitivity(value)` / `getSensitivity()`.
+**ThreeJSAdapter** — sets a custom off-axis projection matrix on the camera each frame.
+
+```typescript
+new ThreeJSAdapter({
+  camera: THREE.PerspectiveCamera,
+  screen: ScreenConfig,
+  near?: number,   // clipping plane (default: 0.05)
+  far?: number,    // clipping plane (default: 100)
+})
+```
+
+**CSSAdapter** — sets `perspective` and `perspective-origin` on a container element.
+
+```typescript
+new CSSAdapter({
+  container: HTMLElement,
+  screen: ScreenConfig,
+  sensitivity?: number,  // parallax intensity multiplier (default: 1.0)
+})
+```
+
+Additional methods: `setSensitivity(value)`, `getSensitivity()`.
 
 ### UI Components
 
-| Component | Trigger | Purpose |
-|-----------|---------|---------|
-| `CalibrationOverlay` | `c` key, auto on start | Two-step guided calibration |
-| `CalibrationPanel` | `` ` `` key | Live controls, camera preview, PPI ruler |
-| `DiagnosticOverlay` | `d` key | Tracking accuracy verification |
-| `GridRoom` | — | Viewport-anchored grid room background |
-
-### GridRoom
-
-```typescript
-const room = new GridRoom(screenConfig, {
-  depth: 0.60,          // how far back the grid extends
-  gridSpacing: 0.053,   // line density
-  lineWidth: 1.5,       // line weight in pixels
-  showBackWall: false,   // close the box or fade to black
-  wallStyle: 'grid',    // 'grid' or 'solid'
-});
-scene.add(room.getGroup());
-
-// On resize:
-room.updateScreen(newScreenConfig);
-room.updateResolution();
-room.rebuild();
-```
+| Component | Import | Trigger | Purpose |
+|-----------|--------|---------|---------|
+| `CalibrationPanel` | `parallax-display` | `` ` `` key | Side panel with controls + camera preview |
+| `CalibrationOverlay` | `parallax-display/three` | `c` key | Full-screen guided calibration |
+| `DiagnosticOverlay` | `parallax-display/three` | `d` key | Tracking accuracy verification |
+| `GridRoom` | `parallax-display/three` | — | Viewport-anchored grid room background |
 
 ### Filters
 
@@ -248,7 +523,8 @@ Both can be tuned at runtime via the calibration panel or `engine.getFilter().up
 
 ```
 src/
-  index.ts                      # public API barrel
+  index.ts                      # core entry point (no Three.js dependency)
+  three.ts                      # Three.js entry point (re-exports core + adds Three.js deps)
   core/
     ParallaxEngine.ts           # orchestrator
   tracking/
@@ -264,10 +540,10 @@ src/
     ThreeJSAdapter.ts           # Three.js projection matrix
     CSSAdapter.ts               # CSS perspective + perspective-origin
   ui/
-    CalibrationOverlay.ts       # guided two-step calibration
-    CalibrationPanel.ts         # side panel with controls
-    DiagnosticOverlay.ts        # tracking verification tests
-    gridRoom.ts                 # viewport-anchored grid background
+    CalibrationOverlay.ts       # guided two-step calibration (Three.js)
+    CalibrationPanel.ts         # side panel with controls (DOM-only)
+    DiagnosticOverlay.ts        # tracking verification tests (Three.js)
+    gridRoom.ts                 # viewport-anchored grid background (Three.js)
 examples/
   three-demo/                   # 3D targets in a grid room
   css-demo/                     # depth-layered cards and shapes
@@ -277,7 +553,7 @@ examples/
 
 ```bash
 npm run dev        # start dev server (serves examples)
-npm run build      # build library (ESM + UMD) + type declarations
+npm run build      # build library (ESM + CJS) + type declarations
 npm run build:site # build demo site for deployment (multi-page app)
 npm run preview    # preview production site build
 npm run typecheck  # type-check without emitting
@@ -316,8 +592,11 @@ Note: webcam tracking requires HTTPS. Most hosting providers (Vercel, Netlify, G
 
 ## Dependencies
 
+**Required peer dependency:**
 - **[@mediapipe/tasks-vision](https://www.npmjs.com/package/@mediapipe/tasks-vision)** — face landmark detection
-- **[three](https://www.npmjs.com/package/three)** — 3D rendering (external, not bundled)
+
+**Optional peer dependency:**
+- **[three](https://www.npmjs.com/package/three)** — 3D rendering (only needed for `parallax-display/three` entry point)
 
 ## License
 
