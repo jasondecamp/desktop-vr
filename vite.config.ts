@@ -4,21 +4,18 @@ import { resolve } from 'path';
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.ts'),
-      name: 'ParallaxDisplay',
-      fileName: 'parallax-display',
+      entry: {
+        index: resolve(__dirname, 'src/index.ts'),
+        three: resolve(__dirname, 'src/three.ts'),
+      },
+      formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: ['three'],
-      output: {
-        globals: {
-          three: 'THREE',
-        },
-      },
+      external: [
+        'three',
+        /^three\//,
+        '@mediapipe/tasks-vision',
+      ],
     },
-  },
-  server: {
-    https: false,
-    open: '/examples/three-demo/index.html',
   },
 });

@@ -1,5 +1,5 @@
-import { ParallaxEngine, CSSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, screenFromViewport } from '../../src/index';
-import type { EyePosition } from '../../src/index';
+import { ParallaxEngine, CSSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, screenFromViewport } from '../../src/three';
+import type { EyePosition } from '../../src/three';
 
 const screen = screenFromViewport();
 

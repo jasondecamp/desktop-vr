@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { ParallaxEngine, ThreeJSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, screenFromViewport } from '../../src/index';
-import type { EyePosition } from '../../src/index';
-import { GridRoom } from '../../src/ui/gridRoom';
+import { ParallaxEngine, ThreeJSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, GridRoom, screenFromViewport } from '../../src/three';
+import type { EyePosition } from '../../src/three';
 
 // Auto-compute screen dimensions from viewport
 const screen = screenFromViewport();

@@ -1,7 +1,7 @@
 import type { ParallaxEngine } from '../core/ParallaxEngine';
 import type { EyePosition } from '../tracking/types';
 import { OneEuroFilter, EMAFilter } from '../tracking/filters';
-import { CSSAdapter } from '../adapters/CSSAdapter';
+import type { CSSAdapter } from '../adapters/CSSAdapter';
 
 export interface CalibrationPanelConfig {
   engine: ParallaxEngine;
