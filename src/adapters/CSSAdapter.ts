@@ -27,6 +27,7 @@ export class CSSAdapter {
   private container: HTMLElement;
   private screen: ScreenConfig;
   private sensitivity: number;
+  private scrollOffsetY = 0;
 
   constructor(config: CSSAdapterConfig) {
     this.container = config.container;
@@ -54,10 +55,19 @@ export class CSSAdapter {
     // Convert eye X/Y offset from screen center (meters) to pixel offset.
     // perspective-origin is relative to the container's top-left corner.
     const originX = (containerW / 2) + (eye.x * pixelsPerMeter * this.sensitivity);
-    const originY = (containerH / 2) - (eye.y * pixelsPerMeter * this.sensitivity);
+    const originY = (containerH / 2) - (eye.y * pixelsPerMeter * this.sensitivity) + this.scrollOffsetY;
 
     this.container.style.perspective = `${perspectivePx}px`;
     this.container.style.perspectiveOrigin = `${originX}px ${originY}px`;
+  }
+
+  /** Set a vertical pixel offset added to the perspective origin (e.g., from scroll position) */
+  setScrollOffsetY(px: number): void {
+    this.scrollOffsetY = px;
+  }
+
+  getScrollOffsetY(): number {
+    return this.scrollOffsetY;
   }
 
   setSensitivity(value: number): void {
