@@ -56,10 +56,9 @@ renderGrid();
 // =====================================================
 
 const MAX_DEPTH = 5;
-const TRANSITION_MS = 400;
-const Z_STEP = 100;       // px per background depth level
-const BLUR_STEP = 2;      // px blur per level
-const OPACITY_STEP = 0.3; // opacity reduction per level
+// TODO: restore to 400 after testing
+const TRANSITION_MS = 1600;
+const Z_STEP = 500;        // px per background depth level (5x original)
 
 interface NavPage {
   id: string;
@@ -90,14 +89,20 @@ function updateLayerStyles() {
       layer.style.opacity = '1';
       layer.style.filter = 'blur(0px)';
       layer.style.pointerEvents = 'auto';
+      layer.style.display = '';
     } else if (levelsBack < MAX_DEPTH) {
       const z = -levelsBack * Z_STEP;
-      const blur = levelsBack * BLUR_STEP;
-      const opacity = Math.max(0.05, 1 - levelsBack * OPACITY_STEP);
+      // Exponential opacity: drops fast on first step, slower after
+      // Level 1: 0.35, Level 2: 0.12, Level 3: 0.04, Level 4: 0.02
+      const opacity = Math.max(0.02, Math.pow(0.35, levelsBack));
+      // Quadratic blur: ramps up progressively
+      // Level 1: 3px, Level 2: 8px, Level 3: 15px, Level 4: 24px
+      const blur = levelsBack * levelsBack * 1.5 + levelsBack * 1.5;
       layer.style.transform = `translateZ(${z}px)`;
       layer.style.opacity = `${opacity}`;
       layer.style.filter = `blur(${blur}px)`;
       layer.style.pointerEvents = 'none';
+      layer.style.display = '';
     } else {
       layer.style.display = 'none';
     }
@@ -142,8 +147,8 @@ function pushPage(page: NavPage) {
 
   layer.appendChild(content);
 
-  // Start the layer in the "entering" position (in front, invisible)
-  layer.style.transform = 'translateZ(200px)';
+  // Start the layer far in front of the viewer — zooms in from behind them
+  layer.style.transform = 'translateZ(8000px)';
   layer.style.opacity = '0';
   layer.style.filter = 'blur(0px)';
 
@@ -162,8 +167,8 @@ function popPage() {
 
   const exitingLayer = layerStack.pop()!;
 
-  // Animate the exiting layer forward and fade out
-  exitingLayer.style.transform = 'translateZ(200px)';
+  // Mirror of enter: zoom forward past the viewer and fade out
+  exitingLayer.style.transform = 'translateZ(8000px)';
   exitingLayer.style.opacity = '0';
   exitingLayer.style.pointerEvents = 'none';
 
