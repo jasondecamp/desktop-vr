@@ -1,9 +1,12 @@
+import * as THREE from 'three';
 import {
   ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport,
 } from '../../src/index';
+import type { EyePosition } from '../../src/index';
 import {
-  CalibrationOverlay, DiagnosticOverlay,
+  CalibrationOverlay, DiagnosticOverlay, GridRoom, ThreeJSAdapter,
 } from '../../src/three';
+import { computeOffAxisFrustum } from '../../src/projection/frustum';
 
 const screen = screenFromViewport();
 
@@ -11,114 +14,64 @@ const container = document.getElementById('scene')!;
 const statusEl = document.getElementById('status')!;
 const startBtn = document.getElementById('start-btn')!;
 
-// --- Build CSS grid room ---
+// --- Three.js grid room as a background canvas layer ---
 
-function buildGridRoom() {
-  const existing = document.getElementById('grid-room');
-  if (existing) existing.remove();
+const gridCanvas = document.createElement('canvas');
+Object.assign(gridCanvas.style, {
+  position: 'fixed',
+  inset: '0',
+  width: '100%',
+  height: '100%',
+  zIndex: '-1',
+  pointerEvents: 'none',
+});
+document.body.insertBefore(gridCanvas, document.body.firstChild);
 
-  const room = document.createElement('div');
-  room.id = 'grid-room';
-  const contentH = Math.max(container.scrollHeight, window.innerHeight);
-  const halfW = window.innerWidth / 2;
-  const halfH = contentH / 2;
-  const depth = 300; // px depth of the room
-  const gridSpacing = 60; // px between lines
-  const gridColor = 'rgba(51, 68, 102, 0.25)';
+const gridRenderer = new THREE.WebGLRenderer({ canvas: gridCanvas, antialias: true, alpha: true });
+gridRenderer.setSize(window.innerWidth, window.innerHeight);
+gridRenderer.setPixelRatio(window.devicePixelRatio);
+gridRenderer.setClearColor(0x0a0a14, 1);
 
-  Object.assign(room.style, {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    width: '100%',
-    height: `${contentH}px`,
-    transformStyle: 'preserve-3d',
-    pointerEvents: 'none',
-  });
+const gridScene = new THREE.Scene();
+const gridCamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
+gridCamera.position.set(0, 0, 0.6);
 
-  const createLine = (x1: number, y1: number, z1: number, x2: number, y2: number, z2: number) => {
-    // Use a thin div positioned and rotated in 3D space
-    const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
-    const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const midX = (x1 + x2) / 2, midY = (y1 + y2) / 2, midZ = (z1 + z2) / 2;
+const gridRoom = new GridRoom(screen, {
+  depth: 0.60,
+  gridSpacing: 0.053,
+  showBackWall: false,
+});
+gridScene.add(gridRoom.getGroup());
 
-    const el = document.createElement('div');
-    Object.assign(el.style, {
-      position: 'absolute',
-      width: `${length}px`,
-      height: '1px',
-      background: gridColor,
-      left: '0',
-      top: '0',
-      transformOrigin: '0 0',
-      pointerEvents: 'none',
-    });
+// Track the last eye position for the grid camera
+let lastEyePos: EyePosition | null = null;
 
-    // For axis-aligned lines we can simplify
-    if (z1 === z2) {
-      // Line in the XY plane at depth z
-      const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-      el.style.transform = `translate3d(${x1}px, ${y1}px, ${z1}px) rotate(${angle}deg)`;
-    } else if (x1 === x2 && y1 === y2) {
-      // Line along Z axis
-      el.style.width = `${Math.abs(dz)}px`;
-      el.style.transform = `translate3d(${x1}px, ${y1}px, ${Math.max(z1, z2)}px) rotateY(90deg)`;
-    }
+function renderGrid() {
+  requestAnimationFrame(renderGrid);
 
-    room.appendChild(el);
-  };
+  if (lastEyePos) {
+    // Apply scroll offset to the eye Y position for the grid
+    const scrollMeters = (window.scrollY / window.innerHeight) * screen.heightMeters;
+    const eye: EyePosition = {
+      x: lastEyePos.x,
+      y: lastEyePos.y + scrollMeters,
+      z: lastEyePos.z,
+    };
 
-  // Vertical lines along Z on left and right walls
-  const linesH = Math.ceil(contentH / gridSpacing);
-  const linesDepth = Math.ceil(depth / gridSpacing);
-
-  // Left wall
-  for (let i = 0; i <= linesH; i++) {
-    const y = i * gridSpacing;
-    createLine(0, y, 0, 0, y, -depth);
-  }
-  for (let i = 0; i <= linesDepth; i++) {
-    const z = -i * gridSpacing;
-    createLine(0, 0, z, 0, contentH, z);
+    const viewportAspect = window.innerWidth / window.innerHeight;
+    const frustum = computeOffAxisFrustum(eye, screen, 0.01, 50, viewportAspect);
+    gridCamera.projectionMatrix.makePerspective(
+      frustum.left, frustum.right, frustum.top, frustum.bottom,
+      frustum.near, frustum.far,
+    );
+    gridCamera.projectionMatrixInverse.copy(gridCamera.projectionMatrix).invert();
+    gridCamera.position.set(eye.x, eye.y, eye.z);
+    gridCamera.lookAt(eye.x, eye.y, 0);
   }
 
-  // Right wall
-  for (let i = 0; i <= linesH; i++) {
-    const y = i * gridSpacing;
-    createLine(window.innerWidth, y, 0, window.innerWidth, y, -depth);
-  }
-  for (let i = 0; i <= linesDepth; i++) {
-    const z = -i * gridSpacing;
-    createLine(window.innerWidth, 0, z, window.innerWidth, contentH, z);
-  }
-
-  // Floor
-  const linesW = Math.ceil(window.innerWidth / gridSpacing);
-  for (let i = 0; i <= linesW; i++) {
-    const x = i * gridSpacing;
-    createLine(x, contentH, 0, x, contentH, -depth);
-  }
-  for (let i = 0; i <= linesDepth; i++) {
-    const z = -i * gridSpacing;
-    createLine(0, contentH, z, window.innerWidth, contentH, z);
-  }
-
-  // Ceiling
-  for (let i = 0; i <= linesW; i++) {
-    const x = i * gridSpacing;
-    createLine(x, 0, 0, x, 0, -depth);
-  }
-  for (let i = 0; i <= linesDepth; i++) {
-    const z = -i * gridSpacing;
-    createLine(0, 0, z, window.innerWidth, 0, z);
-  }
-
-  // Insert as first child of scene
-  container.insertBefore(room, container.firstChild);
+  gridRenderer.render(gridScene, gridCamera);
 }
-
-// Build after a frame so content height is computed
-requestAnimationFrame(buildGridRoom);
+renderGrid();
 
 // --- Toggles ---
 
@@ -147,10 +100,7 @@ document.querySelectorAll('[data-slider]').forEach((el) => {
   }
   update();
 
-  thumb.addEventListener('mousedown', (e) => {
-    dragging = true;
-    e.preventDefault();
-  });
+  thumb.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
 
   document.addEventListener('mousemove', (e) => {
     if (!dragging) return;
@@ -163,9 +113,7 @@ document.querySelectorAll('[data-slider]').forEach((el) => {
   document.addEventListener('mouseup', () => { dragging = false; });
 });
 
-// --- Knob ---
-// The knob uses a document-level overlay during drag to prevent
-// pointer events from being lost to 3D-transformed elements.
+// --- Knob (with drag overlay) ---
 
 const knob = document.getElementById('knob')!;
 const knobValue = document.getElementById('knob-value')!;
@@ -179,14 +127,9 @@ function updateKnob(angle: number) {
 }
 updateKnob(knobAngle);
 
-// Create an invisible overlay that captures mouse during knob drag
 const dragOverlay = document.createElement('div');
 Object.assign(dragOverlay.style, {
-  position: 'fixed',
-  inset: '0',
-  zIndex: '9999',
-  cursor: 'grabbing',
-  display: 'none',
+  position: 'fixed', inset: '0', zIndex: '9999', cursor: 'grabbing', display: 'none',
 });
 document.body.appendChild(dragOverlay);
 
@@ -201,13 +144,10 @@ knob.addEventListener('mousedown', (e: MouseEvent) => {
 });
 
 dragOverlay.addEventListener('mousemove', (e: MouseEvent) => {
-  const dy = knobStartY - e.clientY;
-  updateKnob(knobStartAngle + dy * 1.5);
+  updateKnob(knobStartAngle + (knobStartY - e.clientY) * 1.5);
 });
 
-dragOverlay.addEventListener('mouseup', () => {
-  dragOverlay.style.display = 'none';
-});
+dragOverlay.addEventListener('mouseup', () => { dragOverlay.style.display = 'none'; });
 
 // --- Chips ---
 
@@ -231,14 +171,17 @@ setInterval(() => {
   indicators.forEach((ind, i) => { ind.className = `indicator ${indicatorStates[i]}`; });
 }, 2000);
 
-// --- Parallax engine ---
+// --- Parallax engine (CSS adapter for the UI, Three.js grid behind) ---
 
 const adapter = new CSSAdapter({ container, screen, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
   adapter,
   persist: true,
   tracking: { smoothing: 'one-euro' },
-  onTrack: () => { statusEl.textContent = 'tracking'; },
+  onTrack: (pos) => {
+    statusEl.textContent = 'tracking';
+    lastEyePos = pos;
+  },
   onTrackingLost: () => { statusEl.textContent = 'face not detected'; },
 });
 
@@ -246,7 +189,7 @@ new CalibrationPanel({ engine, startCollapsed: true });
 new CalibrationOverlay({ engine, autoStart: false });
 new DiagnosticOverlay({ engine });
 
-// --- Scroll-linked perspective (native adapter integration) ---
+// --- Scroll → CSS adapter offset ---
 
 function onScroll() {
   adapter.setScrollOffsetY(window.scrollY);
@@ -272,5 +215,8 @@ startBtn.addEventListener('click', async () => {
 
 window.addEventListener('resize', () => {
   engine.updateScreenFromViewport();
-  buildGridRoom();
+  gridRenderer.setSize(window.innerWidth, window.innerHeight);
+  gridCamera.aspect = window.innerWidth / window.innerHeight;
+  gridRoom.rebuild();
+  gridRoom.updateResolution();
 });

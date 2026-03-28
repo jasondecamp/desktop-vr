@@ -22,20 +22,6 @@
       transform-style: preserve-3d;
     }
 
-    /* --- Background --- */
-
-    .bg-layer {
-      position: fixed;
-      inset: 0;
-      transform: translateZ(-80px);
-      background: radial-gradient(ellipse at 50% 30%, #1a1a2e 0%, #0a0a14 100%);
-      width: 140%;
-      height: 140%;
-      top: -20%;
-      left: -20%;
-      pointer-events: none;
-    }
-
     /* --- Content column --- */
 
     .content {
@@ -429,8 +415,6 @@
   <button id="start-btn">Enable Head Tracking</button>
 
   <div id="scene">
-    <div class="bg-layer"></div>
-
     <div class="content">
       <h1 class="page-title">3D UI Controls</h1>
       <p class="page-subtitle">Interface elements with physical depth. Buttons press into the screen, cards lift on hover, and everything shifts with your perspective. Scroll to see more.</p>
