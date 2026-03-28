@@ -9,6 +9,15 @@ import type { EMAFilter, OneEuroFilter } from '../tracking/filters';
 
 type Adapter = ThreeJSAdapter | CSSAdapter;
 
+const STORAGE_KEY = 'parallax-display:settings';
+
+interface PersistedSettings {
+  ppi?: number;
+  eyeOffset?: EyePosition;
+  calibration?: Partial<CalibrationConfig>;
+  smoothing?: 'none' | 'ema' | 'one-euro';
+}
+
 export interface ParallaxEngineConfig {
   adapter: Adapter;
   /**
@@ -24,6 +33,12 @@ export interface ParallaxEngineConfig {
    * Default: 96 (CSS standard, close for most desktop monitors).
    */
   ppi?: number;
+  /**
+   * Persist calibration settings (PPI, eye offset, calibration config,
+   * smoothing type) to localStorage and restore on next load.
+   * Default: false
+   */
+  persist?: boolean;
   /** Called each frame with the current eye position */
   onTrack?: (position: EyePosition) => void;
   /** Called when face tracking is lost */
@@ -44,13 +59,26 @@ export class ParallaxEngine {
   private eyeOffset: EyePosition = { x: 0, y: 0, z: 0 };
   private ppi: number;
   private calibrationPaused = false;
+  private persistEnabled: boolean;
 
   constructor(config: ParallaxEngineConfig) {
     this.adapter = config.adapter;
-    this.ppi = config.ppi ?? 96;
+    this.persistEnabled = config.persist ?? false;
     this.onTrack = config.onTrack;
     this.onTrackingLost = config.onTrackingLost;
     this.onScreenChange = config.onScreenChange;
+
+    // Load persisted settings if enabled
+    const saved = this.persistEnabled ? this.loadSettings() : null;
+
+    this.ppi = saved?.ppi ?? config.ppi ?? 96;
+
+    if (saved?.eyeOffset) {
+      this.eyeOffset = saved.eyeOffset;
+    }
+
+    // Merge calibration: saved values override config values
+    const calibration = { ...config.calibration, ...saved?.calibration };
 
     // Auto-compute screen dimensions from viewport if not provided
     const screenConfig = config.screen?.widthMeters && config.screen?.heightMeters
@@ -59,11 +87,14 @@ export class ParallaxEngine {
 
     this.coordinateMapper = new CoordinateMapper(
       screenConfig,
-      config.calibration,
+      calibration,
     );
+
+    const smoothing = saved?.smoothing ?? config.tracking?.smoothing ?? 'one-euro';
 
     this.faceTracker = new FaceTracker(this.coordinateMapper, {
       ...config.tracking,
+      smoothing,
       onTrack: this.handleTrack,
       onTrackingLost: this.handleTrackingLost,
     });
@@ -88,6 +119,7 @@ export class ParallaxEngine {
 
   updateCalibration(updates: Partial<CalibrationConfig>): void {
     this.coordinateMapper.updateCalibration(updates);
+    this.saveSettings();
   }
 
   updateScreen(updates: Partial<ScreenConfig>): void {
@@ -112,6 +144,7 @@ export class ParallaxEngine {
   setPpi(ppi: number): void {
     this.ppi = ppi;
     this.updateScreenFromViewport();
+    this.saveSettings();
   }
 
   getEyePosition(): EyePosition | null {
@@ -136,6 +169,7 @@ export class ParallaxEngine {
 
   setSmoothing(type: 'none' | 'ema' | 'one-euro'): void {
     this.faceTracker.setSmoothing(type);
+    this.saveSettings();
   }
 
   getFilter(): EMAFilter | OneEuroFilter | null {
@@ -157,6 +191,7 @@ export class ParallaxEngine {
 
   setEyeOffset(offset: EyePosition): void {
     this.eyeOffset = { ...offset };
+    this.saveSettings();
   }
 
   getEyeOffset(): EyePosition {
@@ -171,6 +206,38 @@ export class ParallaxEngine {
   resumeAdapterUpdates(): void {
     this.calibrationPaused = false;
   }
+
+  /** Clear all persisted settings */
+  clearPersistedSettings(): void {
+    try { localStorage.removeItem(STORAGE_KEY); } catch {}
+  }
+
+  // --- Persistence ---
+
+  private saveSettings(): void {
+    if (!this.persistEnabled) return;
+    const settings: PersistedSettings = {
+      ppi: this.ppi,
+      eyeOffset: this.eyeOffset,
+      calibration: this.coordinateMapper.getCalibrationConfig(),
+      smoothing: this.faceTracker.getSmoothingType(),
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    } catch {}
+  }
+
+  private loadSettings(): PersistedSettings | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw) as PersistedSettings;
+    } catch {
+      return null;
+    }
+  }
+
+  // --- Tracking ---
 
   private handleTrack = (position: EyePosition): void => {
     this.lastEyePosition = position;
