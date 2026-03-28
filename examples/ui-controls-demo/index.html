@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallax Display — 3D UI Controls</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #111;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #scene {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      transform-style: preserve-3d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* --- Background --- */
+
+    .bg-layer {
+      position: absolute;
+      inset: 0;
+      transform: translateZ(-60px);
+      background: radial-gradient(ellipse at 50% 40%, #1a1a2e 0%, #0a0a14 100%);
+      width: 130%;
+      height: 130%;
+      top: -15%;
+      left: -15%;
+    }
+
+    /* --- Control panel --- */
+
+    .panel {
+      transform: translateZ(0px);
+      transform-style: preserve-3d;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      padding: 48px;
+      max-width: 700px;
+      width: 100%;
+    }
+
+    .control-group {
+      transform-style: preserve-3d;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .control-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #667;
+      transform: translateZ(2px);
+    }
+
+    /* --- Raised Card --- */
+
+    .card {
+      transform: translateZ(20px);
+      transform-style: preserve-3d;
+      background: #1e1e2e;
+      border-radius: 16px;
+      padding: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      transition: transform 0.25s ease;
+      cursor: pointer;
+    }
+
+    .card:hover {
+      transform: translateZ(35px);
+    }
+
+    .card:active {
+      transform: translateZ(8px);
+      transition: transform 0.08s ease;
+    }
+
+    .card h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #fff;
+      transform: translateZ(4px);
+    }
+
+    .card p {
+      font-size: 13px;
+      color: #889;
+      line-height: 1.5;
+      transform: translateZ(2px);
+    }
+
+    /* --- Button --- */
+
+    .btn-row {
+      display: flex;
+      gap: 12px;
+      transform-style: preserve-3d;
+    }
+
+    .btn {
+      transform: translateZ(18px);
+      transform-style: preserve-3d;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+      position: relative;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #5b6abf, #7c6dd8);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: #2a2a3e;
+      color: #aab;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn:hover {
+      transform: translateZ(24px);
+    }
+
+    .btn:active {
+      transform: translateZ(4px);
+      transition: transform 0.06s ease;
+    }
+
+    .btn .btn-label {
+      transform: translateZ(3px);
+      display: block;
+    }
+
+    /* --- Toggle Switch --- */
+
+    .toggle-track {
+      width: 52px;
+      height: 28px;
+      border-radius: 14px;
+      background: #2a2a3e;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.25s ease;
+      transform: translateZ(6px);
+      transform-style: preserve-3d;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .toggle-track.on {
+      background: #5b6abf;
+    }
+
+    .toggle-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      transition: left 0.2s ease, transform 0.2s ease;
+      transform: translateZ(10px);
+    }
+
+    .toggle-track.on .toggle-thumb {
+      left: 27px;
+      transform: translateZ(14px);
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transform-style: preserve-3d;
+    }
+
+    .toggle-status {
+      font-size: 13px;
+      color: #889;
+      transform: translateZ(2px);
+    }
+
+    /* --- Slider --- */
+
+    .slider-container {
+      transform-style: preserve-3d;
+      position: relative;
+      height: 40px;
+      display: flex;
+      align-items: center;
+    }
+
+    .slider-well {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #1a1a2a;
+      transform: translateZ(-4px);
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .slider-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #5b6abf, #7c6dd8);
+      width: 60%;
+      transform: translateZ(1px);
+    }
+
+    .slider-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fff;
+      position: absolute;
+      top: 50%;
+      left: 60%;
+      transform: translateZ(16px) translate(-50%, -50%);
+      cursor: grab;
+      transition: transform 0.1s ease;
+      border: 2px solid rgba(91, 106, 191, 0.5);
+    }
+
+    .slider-thumb:hover {
+      transform: translateZ(22px) translate(-50%, -50%);
+    }
+
+    .slider-value {
+      font-size: 13px;
+      font-family: ui-monospace, 'SF Mono', monospace;
+      color: #7c6dd8;
+      min-width: 36px;
+      text-align: right;
+      margin-left: 12px;
+      transform: translateZ(4px);
+    }
+
+    /* --- Recessed Indicator --- */
+
+    .indicator-row {
+      display: flex;
+      gap: 10px;
+      transform-style: preserve-3d;
+    }
+
+    .indicator {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      transform: translateZ(-6px);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .indicator.off {
+      background: #1a1a2a;
+    }
+
+    .indicator.green {
+      background: #44cc66;
+      transform: translateZ(4px);
+      box-shadow: 0 0 8px rgba(68, 204, 102, 0.4);
+    }
+
+    .indicator.yellow {
+      background: #ffaa33;
+      transform: translateZ(4px);
+      box-shadow: 0 0 8px rgba(255, 170, 51, 0.4);
+    }
+
+    .indicator.red {
+      background: #ff4444;
+      transform: translateZ(4px);
+      box-shadow: 0 0 8px rgba(255, 68, 68, 0.4);
+    }
+
+    /* --- Volume Knob --- */
+
+    .knob-container {
+      transform-style: preserve-3d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .knob-well {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: #0e0e1a;
+      transform: translateZ(-8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .knob {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2a2a3e, #3a3a52);
+      transform: translateZ(12px);
+      transform-style: preserve-3d;
+      cursor: grab;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .knob-marker {
+      position: absolute;
+      top: 4px;
+      left: 50%;
+      width: 3px;
+      height: 10px;
+      background: #7c6dd8;
+      border-radius: 2px;
+      transform: translateX(-50%) translateZ(4px);
+    }
+
+    .knob-value {
+      font-size: 12px;
+      font-family: ui-monospace, 'SF Mono', monospace;
+      color: #7c6dd8;
+      transform: translateZ(2px);
+    }
+
+    /* --- Chip / Tag --- */
+
+    .chip-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      transform-style: preserve-3d;
+    }
+
+    .chip {
+      transform: translateZ(12px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .chip.active {
+      background: #5b6abf;
+      color: #fff;
+      transform: translateZ(18px);
+      border-color: transparent;
+    }
+
+    .chip.inactive {
+      background: #1e1e2e;
+      color: #889;
+      transform: translateZ(8px);
+    }
+
+    .chip:hover {
+      transform: translateZ(22px);
+    }
+
+    /* --- Start button overlay --- */
+
+    #start-btn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      font-size: 18px;
+      padding: 16px 32px;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      background: rgba(10, 10, 20, 0.9);
+      color: #7c6dd8;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #start-btn:hover { background: rgba(20, 20, 40, 0.9); }
+
+    #status-overlay {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-overlay"><span id="status">not started</span></div>
+  <button id="start-btn">Enable Head Tracking</button>
+
+  <div id="scene">
+    <!-- Background -->
+    <div class="bg-layer"></div>
+
+    <!-- Control panel -->
+    <div class="panel">
+
+      <!-- Card -->
+      <div class="control-group" style="grid-column: 1 / -1;">
+        <span class="control-label">Interactive Card</span>
+        <div class="card" id="card">
+          <h3>Depth-Aware Card</h3>
+          <p>Hover to lift forward. Click to press into the screen. The parallax shifts the perspective as you move.</p>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="control-group">
+        <span class="control-label">Buttons</span>
+        <div class="btn-row">
+          <button class="btn btn-primary"><span class="btn-label">Primary</span></button>
+          <button class="btn btn-secondary"><span class="btn-label">Secondary</span></button>
+        </div>
+      </div>
+
+      <!-- Toggle -->
+      <div class="control-group">
+        <span class="control-label">Toggle</span>
+        <div class="toggle-row">
+          <div class="toggle-track" id="toggle">
+            <div class="toggle-thumb"></div>
+          </div>
+          <span class="toggle-status" id="toggle-status">Off</span>
+        </div>
+      </div>
+
+      <!-- Slider -->
+      <div class="control-group">
+        <span class="control-label">Slider</span>
+        <div class="slider-container" id="slider">
+          <div class="slider-well">
+            <div class="slider-fill" id="slider-fill"></div>
+          </div>
+          <div class="slider-thumb" id="slider-thumb"></div>
+          <span class="slider-value" id="slider-value">60</span>
+        </div>
+      </div>
+
+      <!-- Knob -->
+      <div class="control-group">
+        <span class="control-label">Volume Knob</span>
+        <div class="knob-container">
+          <div class="knob-well">
+            <div class="knob" id="knob">
+              <div class="knob-marker"></div>
+            </div>
+          </div>
+          <span class="knob-value" id="knob-value">65%</span>
+        </div>
+      </div>
+
+      <!-- Indicators -->
+      <div class="control-group">
+        <span class="control-label">Status Indicators</span>
+        <div class="indicator-row">
+          <div class="indicator green" id="ind-1"></div>
+          <div class="indicator yellow" id="ind-2"></div>
+          <div class="indicator off" id="ind-3"></div>
+          <div class="indicator off" id="ind-4"></div>
+          <div class="indicator red" id="ind-5"></div>
+        </div>
+      </div>
+
+      <!-- Chips -->
+      <div class="control-group" style="grid-column: 1 / -1;">
+        <span class="control-label">Filter Chips</span>
+        <div class="chip-row">
+          <div class="chip active" data-chip>All</div>
+          <div class="chip inactive" data-chip>Design</div>
+          <div class="chip inactive" data-chip>Code</div>
+          <div class="chip inactive" data-chip>Motion</div>
+          <div class="chip inactive" data-chip>3D</div>
+          <div class="chip inactive" data-chip>Audio</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
