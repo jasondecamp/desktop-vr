@@ -1,6 +1,9 @@
 import {
   ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport,
 } from '../../src/index';
+import {
+  CalibrationOverlay, DiagnosticOverlay,
+} from '../../src/three';
 
 const screen = screenFromViewport();
 
@@ -8,63 +11,76 @@ const container = document.getElementById('scene')!;
 const statusEl = document.getElementById('status')!;
 const startBtn = document.getElementById('start-btn')!;
 
-// --- Toggle ---
+// --- Toggles (all of them) ---
 
-const toggle = document.getElementById('toggle')!;
-const toggleStatus = document.getElementById('toggle-status')!;
-let toggleOn = false;
-
-toggle.addEventListener('click', () => {
-  toggleOn = !toggleOn;
-  toggle.classList.toggle('on', toggleOn);
-  toggleStatus.textContent = toggleOn ? 'On' : 'Off';
+document.querySelectorAll('[data-toggle]').forEach((track) => {
+  const status = track.nextElementSibling as HTMLElement;
+  track.addEventListener('click', () => {
+    const isOn = track.classList.toggle('on');
+    if (status) status.textContent = isOn ? 'On' : 'Off';
+  });
 });
 
-// --- Slider ---
+// --- Sliders (all of them) ---
 
-const sliderContainer = document.getElementById('slider')!;
-const sliderFill = document.getElementById('slider-fill')!;
-const sliderThumb = document.getElementById('slider-thumb')!;
-const sliderValue = document.getElementById('slider-value')!;
-let sliderPercent = 60;
-let sliderDragging = false;
-
-function updateSlider(pct: number) {
-  sliderPercent = Math.max(0, Math.min(100, pct));
-  sliderFill.style.width = `${sliderPercent}%`;
-  sliderThumb.style.left = `${sliderPercent}%`;
-  sliderValue.textContent = Math.round(sliderPercent).toString();
+interface SliderState {
+  container: HTMLElement;
+  fill: HTMLElement;
+  thumb: HTMLElement;
+  valueEl: HTMLElement;
+  percent: number;
 }
 
-sliderThumb.addEventListener('mousedown', (e) => {
-  sliderDragging = true;
-  e.preventDefault();
+const sliders: SliderState[] = [];
+
+document.querySelectorAll('[data-slider]').forEach((el) => {
+  const container = el as HTMLElement;
+  const fill = container.querySelector('.slider-fill') as HTMLElement;
+  const thumb = container.querySelector('.slider-thumb') as HTMLElement;
+  const valueEl = container.querySelector('.slider-value') as HTMLElement;
+  const initial = parseInt(container.dataset.value ?? '50', 10);
+
+  const state: SliderState = { container, fill, thumb, valueEl, percent: initial };
+  updateSliderUI(state);
+  sliders.push(state);
+
+  let dragging = false;
+
+  thumb.addEventListener('mousedown', (e) => {
+    dragging = true;
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const well = container.querySelector('.slider-well')!;
+    const rect = well.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    state.percent = Math.max(0, Math.min(100, pct));
+    updateSliderUI(state);
+  });
+
+  document.addEventListener('mouseup', () => { dragging = false; });
 });
 
-document.addEventListener('mousemove', (e) => {
-  if (!sliderDragging) return;
-  const well = sliderContainer.querySelector('.slider-well')!;
-  const rect = well.getBoundingClientRect();
-  const pct = ((e.clientX - rect.left) / rect.width) * 100;
-  updateSlider(pct);
-});
-
-document.addEventListener('mouseup', () => {
-  sliderDragging = false;
-});
+function updateSliderUI(s: SliderState) {
+  s.fill.style.width = `${s.percent}%`;
+  s.thumb.style.left = `${s.percent}%`;
+  s.valueEl.textContent = Math.round(s.percent).toString();
+}
 
 // --- Knob ---
 
 const knob = document.getElementById('knob')!;
 const knobValue = document.getElementById('knob-value')!;
-let knobAngle = 200; // degrees, 0-300 range
+let knobAngle = 200;
 let knobDragging = false;
 let knobStartY = 0;
 let knobStartAngle = 0;
 
 function updateKnob(angle: number) {
   knobAngle = Math.max(0, Math.min(300, angle));
-  const rotation = knobAngle - 150; // center the range
+  const rotation = knobAngle - 150;
   knob.style.transform = `translateZ(12px) rotate(${rotation}deg)`;
   const pct = Math.round((knobAngle / 300) * 100);
   knobValue.textContent = `${pct}%`;
@@ -77,16 +93,20 @@ knob.addEventListener('mousedown', (e) => {
   knobStartY = e.clientY;
   knobStartAngle = knobAngle;
   e.preventDefault();
+  document.body.style.cursor = 'grabbing';
 });
 
 document.addEventListener('mousemove', (e) => {
   if (!knobDragging) return;
-  const dy = knobStartY - e.clientY; // up = increase
+  const dy = knobStartY - e.clientY;
   updateKnob(knobStartAngle + dy * 1.5);
 });
 
 document.addEventListener('mouseup', () => {
-  knobDragging = false;
+  if (knobDragging) {
+    knobDragging = false;
+    document.body.style.cursor = '';
+  }
 });
 
 // --- Chips ---
@@ -103,19 +123,12 @@ chips.forEach((chip) => {
   });
 });
 
-// --- Indicator cycling (demo animation) ---
+// --- Indicator cycling ---
 
-const indicators = [
-  document.getElementById('ind-1')!,
-  document.getElementById('ind-2')!,
-  document.getElementById('ind-3')!,
-  document.getElementById('ind-4')!,
-  document.getElementById('ind-5')!,
-];
+const indicators = Array.from(document.querySelectorAll('[data-indicator]'));
 const indicatorStates = ['green', 'yellow', 'off', 'off', 'red'];
 
 setInterval(() => {
-  // Shift states around
   const last = indicatorStates.pop()!;
   indicatorStates.unshift(last);
   indicators.forEach((ind, i) => {
@@ -123,7 +136,7 @@ setInterval(() => {
   });
 }, 2000);
 
-// --- Parallax engine (CSS mode) ---
+// --- Parallax engine (CSS mode) with scroll-linked perspective ---
 
 const adapter = new CSSAdapter({ container, screen, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
@@ -135,6 +148,59 @@ const engine = new ParallaxEngine({
 });
 
 new CalibrationPanel({ engine, startCollapsed: true });
+new CalibrationOverlay({ engine, autoStart: false });
+new DiagnosticOverlay({ engine });
+
+// --- Scroll-linked perspective offset ---
+// Scrolling shifts the perspective origin vertically, as if the viewer
+// is looking at a different part of the scene. This adds to the
+// head-tracking parallax for a combined effect.
+
+function updateScrollPerspective() {
+  const scrollY = window.scrollY;
+  const viewH = window.innerHeight;
+  const docH = document.documentElement.scrollHeight;
+  const maxScroll = docH - viewH;
+
+  if (maxScroll <= 0) return;
+
+  // Map scroll to a vertical perspective-origin shift.
+  // The CSS adapter sets perspective-origin, but we augment it here
+  // by shifting the container's transform-origin based on scroll position.
+  const scrollFraction = scrollY / maxScroll;
+  // Shift the scene's visual origin: top of page = top of scene, bottom = bottom
+  const originY = 30 + scrollFraction * 40; // range: 30% to 70%
+  container.style.perspectiveOrigin =
+    container.style.perspectiveOrigin?.replace(/\d+(\.\d+)?px$/, '') || '';
+  // We store the scroll offset as a CSS variable the adapter can't override
+  container.style.setProperty('--scroll-origin-y', `${originY}%`);
+}
+
+// Override the adapter's perspective-origin to include scroll offset
+const originalUpdate = adapter.update.bind(adapter);
+adapter.update = (eye) => {
+  originalUpdate(eye);
+  // After the adapter sets perspective-origin, blend in scroll offset
+  const currentOrigin = container.style.perspectiveOrigin;
+  if (currentOrigin) {
+    const parts = currentOrigin.split(' ');
+    const scrollOriginY = container.style.getPropertyValue('--scroll-origin-y') || '50%';
+    // The adapter sets pixel values; we add the scroll offset as a percentage blend
+    if (parts.length >= 2) {
+      const adapterY = parseFloat(parts[1]);
+      const scrollY = parseFloat(scrollOriginY);
+      const containerH = container.getBoundingClientRect().height;
+      // Convert scroll percentage to pixels relative to container
+      const scrollOffsetPx = (scrollY / 100 - 0.5) * containerH;
+      container.style.perspectiveOrigin = `${parts[0]} ${adapterY + scrollOffsetPx}px`;
+    }
+  }
+};
+
+window.addEventListener('scroll', updateScrollPerspective, { passive: true });
+updateScrollPerspective();
+
+// --- Start ---
 
 startBtn.addEventListener('click', async () => {
   startBtn.style.display = 'none';

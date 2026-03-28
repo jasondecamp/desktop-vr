@@ -8,69 +8,78 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      background: #111;
+      background: #0a0a14;
       color: #e0e0e0;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
-      overflow: hidden;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
+
+    /* --- Scene (perspective host + scroll container) --- */
 
     #scene {
       width: 100vw;
-      height: 100vh;
+      min-height: 100vh;
       position: relative;
       transform-style: preserve-3d;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
 
     /* --- Background --- */
 
     .bg-layer {
-      position: absolute;
+      position: fixed;
       inset: 0;
-      transform: translateZ(-60px);
-      background: radial-gradient(ellipse at 50% 40%, #1a1a2e 0%, #0a0a14 100%);
-      width: 130%;
-      height: 130%;
-      top: -15%;
-      left: -15%;
+      transform: translateZ(-80px);
+      background: radial-gradient(ellipse at 50% 30%, #1a1a2e 0%, #0a0a14 100%);
+      width: 140%;
+      height: 140%;
+      top: -20%;
+      left: -20%;
+      pointer-events: none;
     }
 
-    /* --- Control panel --- */
+    /* --- Content column --- */
 
-    .panel {
-      transform: translateZ(0px);
+    .content {
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 60px 24px 120px;
       transform-style: preserve-3d;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 32px;
-      padding: 48px;
-      max-width: 700px;
-      width: 100%;
+      position: relative;
     }
 
-    .control-group {
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+      transform: translateZ(10px);
+    }
+
+    .page-subtitle {
+      font-size: 15px;
+      color: #667;
+      margin-bottom: 48px;
+      line-height: 1.5;
+      transform: translateZ(4px);
+    }
+
+    /* --- Section --- */
+
+    .section {
+      margin-bottom: 40px;
       transform-style: preserve-3d;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
     }
 
-    .control-label {
+    .section-label {
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 1px;
-      color: #667;
+      color: #556;
+      margin-bottom: 16px;
       transform: translateZ(2px);
     }
 
-    /* --- Raised Card --- */
+    /* --- Card --- */
 
     .card {
       transform: translateZ(20px);
@@ -81,38 +90,64 @@
       border: 1px solid rgba(255, 255, 255, 0.06);
       transition: transform 0.25s ease;
       cursor: pointer;
+      margin-bottom: 16px;
     }
 
     .card:hover {
-      transform: translateZ(35px);
+      transform: translateZ(32px);
     }
 
     .card:active {
-      transform: translateZ(8px);
+      transform: translateZ(6px);
       transition: transform 0.08s ease;
     }
 
     .card h3 {
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: #fff;
       transform: translateZ(4px);
     }
 
     .card p {
-      font-size: 13px;
+      font-size: 14px;
       color: #889;
-      line-height: 1.5;
+      line-height: 1.6;
       transform: translateZ(2px);
     }
 
-    /* --- Button --- */
+    .card .card-meta {
+      font-size: 12px;
+      color: #556;
+      margin-top: 12px;
+      transform: translateZ(1px);
+    }
+
+    /* --- Inline control row --- */
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transform-style: preserve-3d;
+      margin-bottom: 16px;
+    }
+
+    .control-row-label {
+      font-size: 14px;
+      color: #aab;
+      min-width: 80px;
+      transform: translateZ(2px);
+    }
+
+    /* --- Buttons --- */
 
     .btn-row {
       display: flex;
       gap: 12px;
       transform-style: preserve-3d;
+      flex-wrap: wrap;
     }
 
     .btn {
@@ -125,8 +160,7 @@
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-      position: relative;
+      transition: transform 0.15s ease;
     }
 
     .btn-primary {
@@ -140,21 +174,20 @@
       border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    .btn:hover {
-      transform: translateZ(24px);
+    .btn-danger {
+      background: linear-gradient(135deg, #bf5b5b, #d86d6d);
+      color: #fff;
     }
 
-    .btn:active {
-      transform: translateZ(4px);
-      transition: transform 0.06s ease;
-    }
+    .btn:hover { transform: translateZ(26px); }
+    .btn:active { transform: translateZ(4px); transition: transform 0.06s ease; }
 
     .btn .btn-label {
       transform: translateZ(3px);
       display: block;
     }
 
-    /* --- Toggle Switch --- */
+    /* --- Toggle --- */
 
     .toggle-track {
       width: 52px;
@@ -167,11 +200,10 @@
       transform: translateZ(6px);
       transform-style: preserve-3d;
       border: 1px solid rgba(255, 255, 255, 0.06);
+      flex-shrink: 0;
     }
 
-    .toggle-track.on {
-      background: #5b6abf;
-    }
+    .toggle-track.on { background: #5b6abf; }
 
     .toggle-thumb {
       width: 22px;
@@ -190,13 +222,6 @@
       transform: translateZ(14px);
     }
 
-    .toggle-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      transform-style: preserve-3d;
-    }
-
     .toggle-status {
       font-size: 13px;
       color: #889;
@@ -211,6 +236,7 @@
       height: 40px;
       display: flex;
       align-items: center;
+      flex: 1;
     }
 
     .slider-well {
@@ -259,7 +285,7 @@
       transform: translateZ(4px);
     }
 
-    /* --- Recessed Indicator --- */
+    /* --- Indicators --- */
 
     .indicator-row {
       display: flex;
@@ -276,36 +302,18 @@
       transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
     }
 
-    .indicator.off {
-      background: #1a1a2a;
-    }
+    .indicator.off { background: #1a1a2a; }
+    .indicator.green { background: #44cc66; transform: translateZ(4px); box-shadow: 0 0 8px rgba(68, 204, 102, 0.4); }
+    .indicator.yellow { background: #ffaa33; transform: translateZ(4px); box-shadow: 0 0 8px rgba(255, 170, 51, 0.4); }
+    .indicator.red { background: #ff4444; transform: translateZ(4px); box-shadow: 0 0 8px rgba(255, 68, 68, 0.4); }
 
-    .indicator.green {
-      background: #44cc66;
-      transform: translateZ(4px);
-      box-shadow: 0 0 8px rgba(68, 204, 102, 0.4);
-    }
+    /* --- Knob --- */
 
-    .indicator.yellow {
-      background: #ffaa33;
-      transform: translateZ(4px);
-      box-shadow: 0 0 8px rgba(255, 170, 51, 0.4);
-    }
-
-    .indicator.red {
-      background: #ff4444;
-      transform: translateZ(4px);
-      box-shadow: 0 0 8px rgba(255, 68, 68, 0.4);
-    }
-
-    /* --- Volume Knob --- */
-
-    .knob-container {
-      transform-style: preserve-3d;
+    .knob-row {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 16px;
+      transform-style: preserve-3d;
     }
 
     .knob-well {
@@ -318,6 +326,7 @@
       align-items: center;
       justify-content: center;
       border: 1px solid rgba(255, 255, 255, 0.04);
+      flex-shrink: 0;
     }
 
     .knob {
@@ -344,13 +353,13 @@
     }
 
     .knob-value {
-      font-size: 12px;
+      font-size: 14px;
       font-family: ui-monospace, 'SF Mono', monospace;
       color: #7c6dd8;
       transform: translateZ(2px);
     }
 
-    /* --- Chip / Tag --- */
+    /* --- Chips --- */
 
     .chip-row {
       display: flex;
@@ -361,9 +370,9 @@
 
     .chip {
       transform: translateZ(12px);
-      padding: 6px 14px;
+      padding: 8px 16px;
       border-radius: 20px;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
       cursor: pointer;
       transition: transform 0.15s ease;
@@ -383,9 +392,7 @@
       transform: translateZ(8px);
     }
 
-    .chip:hover {
-      transform: translateZ(22px);
-    }
+    .chip:hover { transform: translateZ(22px); }
 
     /* --- Start button overlay --- */
 
@@ -422,81 +429,134 @@
   <button id="start-btn">Enable Head Tracking</button>
 
   <div id="scene">
-    <!-- Background -->
     <div class="bg-layer"></div>
 
-    <!-- Control panel -->
-    <div class="panel">
+    <div class="content">
+      <h1 class="page-title">3D UI Controls</h1>
+      <p class="page-subtitle">Interface elements with physical depth. Buttons press into the screen, cards lift on hover, and everything shifts with your perspective. Scroll to see more.</p>
 
-      <!-- Card -->
-      <div class="control-group" style="grid-column: 1 / -1;">
-        <span class="control-label">Interactive Card</span>
-        <div class="card" id="card">
-          <h3>Depth-Aware Card</h3>
-          <p>Hover to lift forward. Click to press into the screen. The parallax shifts the perspective as you move.</p>
+      <!-- Cards -->
+      <div class="section">
+        <div class="section-label">Cards</div>
+
+        <div class="card">
+          <h3>Depth-Aware Notifications</h3>
+          <p>Important notifications could float closer to the viewer, creating a natural visual hierarchy that goes beyond z-index layering. Less important items recede into the background.</p>
+          <div class="card-meta">Concept: Notification Priority</div>
+        </div>
+
+        <div class="card">
+          <h3>Spatial Navigation</h3>
+          <p>Imagine navigating a file system where folders exist at the screen plane and opening one zooms you forward into a deeper layer. Breadcrumbs recede behind you as you go deeper.</p>
+          <div class="card-meta">Concept: File Explorer</div>
+        </div>
+
+        <div class="card">
+          <h3>Layered Editing</h3>
+          <p>A design tool where the canvas sits behind the screen, toolbars float in front, and inspectors pop forward on demand. The depth separation reduces visual clutter without hiding controls.</p>
+          <div class="card-meta">Concept: Design Tool</div>
+        </div>
+
+        <div class="card">
+          <h3>Focus Mode</h3>
+          <p>When editing a document, the focused paragraph could lift forward while surrounding text subtly recedes. Your eyes are naturally drawn to the elevated content.</p>
+          <div class="card-meta">Concept: Text Editor</div>
         </div>
       </div>
 
       <!-- Buttons -->
-      <div class="control-group">
-        <span class="control-label">Buttons</span>
+      <div class="section">
+        <div class="section-label">Buttons</div>
         <div class="btn-row">
-          <button class="btn btn-primary"><span class="btn-label">Primary</span></button>
-          <button class="btn btn-secondary"><span class="btn-label">Secondary</span></button>
+          <button class="btn btn-primary"><span class="btn-label">Save Changes</span></button>
+          <button class="btn btn-secondary"><span class="btn-label">Cancel</span></button>
+          <button class="btn btn-danger"><span class="btn-label">Delete</span></button>
         </div>
       </div>
 
-      <!-- Toggle -->
-      <div class="control-group">
-        <span class="control-label">Toggle</span>
-        <div class="toggle-row">
-          <div class="toggle-track" id="toggle">
+      <!-- Toggles -->
+      <div class="section">
+        <div class="section-label">Toggles</div>
+
+        <div class="control-row">
+          <span class="control-row-label">Dark Mode</span>
+          <div class="toggle-track on" data-toggle>
             <div class="toggle-thumb"></div>
           </div>
-          <span class="toggle-status" id="toggle-status">Off</span>
+          <span class="toggle-status">On</span>
         </div>
-      </div>
 
-      <!-- Slider -->
-      <div class="control-group">
-        <span class="control-label">Slider</span>
-        <div class="slider-container" id="slider">
-          <div class="slider-well">
-            <div class="slider-fill" id="slider-fill"></div>
+        <div class="control-row">
+          <span class="control-row-label">Notifications</span>
+          <div class="toggle-track" data-toggle>
+            <div class="toggle-thumb"></div>
           </div>
-          <div class="slider-thumb" id="slider-thumb"></div>
-          <span class="slider-value" id="slider-value">60</span>
+          <span class="toggle-status">Off</span>
+        </div>
+
+        <div class="control-row">
+          <span class="control-row-label">Auto-save</span>
+          <div class="toggle-track on" data-toggle>
+            <div class="toggle-thumb"></div>
+          </div>
+          <span class="toggle-status">On</span>
         </div>
       </div>
 
-      <!-- Knob -->
-      <div class="control-group">
-        <span class="control-label">Volume Knob</span>
-        <div class="knob-container">
-          <div class="knob-well">
-            <div class="knob" id="knob">
-              <div class="knob-marker"></div>
+      <!-- Sliders -->
+      <div class="section">
+        <div class="section-label">Sliders</div>
+
+        <div class="control-row">
+          <span class="control-row-label">Brightness</span>
+          <div class="slider-container" data-slider data-value="75">
+            <div class="slider-well"><div class="slider-fill"></div></div>
+            <div class="slider-thumb"></div>
+            <span class="slider-value">75</span>
+          </div>
+        </div>
+
+        <div class="control-row">
+          <span class="control-row-label">Volume</span>
+          <div class="slider-container" data-slider data-value="40">
+            <div class="slider-well"><div class="slider-fill"></div></div>
+            <div class="slider-thumb"></div>
+            <span class="slider-value">40</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Knob + Indicators -->
+      <div class="section">
+        <div class="section-label">Rotary &amp; Status</div>
+
+        <div class="control-row">
+          <span class="control-row-label">Gain</span>
+          <div class="knob-row">
+            <div class="knob-well">
+              <div class="knob" id="knob">
+                <div class="knob-marker"></div>
+              </div>
             </div>
+            <span class="knob-value" id="knob-value">65%</span>
           </div>
-          <span class="knob-value" id="knob-value">65%</span>
         </div>
-      </div>
 
-      <!-- Indicators -->
-      <div class="control-group">
-        <span class="control-label">Status Indicators</span>
-        <div class="indicator-row">
-          <div class="indicator green" id="ind-1"></div>
-          <div class="indicator yellow" id="ind-2"></div>
-          <div class="indicator off" id="ind-3"></div>
-          <div class="indicator off" id="ind-4"></div>
-          <div class="indicator red" id="ind-5"></div>
+        <div class="control-row" style="margin-top: 8px;">
+          <span class="control-row-label">Status</span>
+          <div class="indicator-row">
+            <div class="indicator green" data-indicator></div>
+            <div class="indicator yellow" data-indicator></div>
+            <div class="indicator off" data-indicator></div>
+            <div class="indicator off" data-indicator></div>
+            <div class="indicator red" data-indicator></div>
+          </div>
         </div>
       </div>
 
       <!-- Chips -->
-      <div class="control-group" style="grid-column: 1 / -1;">
-        <span class="control-label">Filter Chips</span>
+      <div class="section">
+        <div class="section-label">Filter Chips</div>
         <div class="chip-row">
           <div class="chip active" data-chip>All</div>
           <div class="chip inactive" data-chip>Design</div>
@@ -504,6 +564,35 @@
           <div class="chip inactive" data-chip>Motion</div>
           <div class="chip inactive" data-chip>3D</div>
           <div class="chip inactive" data-chip>Audio</div>
+        </div>
+      </div>
+
+      <!-- More cards for scroll length -->
+      <div class="section">
+        <div class="section-label">More Concepts</div>
+
+        <div class="card">
+          <h3>Data Visualization</h3>
+          <p>Charts where the axes sit at the screen plane, data points float forward proportional to their value, and tooltips pop out toward the viewer. Bar charts become literal columns of depth.</p>
+          <div class="card-meta">Concept: Dashboard</div>
+        </div>
+
+        <div class="card">
+          <h3>Modal Dialogs</h3>
+          <p>Instead of a flat overlay with a dimmed backdrop, modals could physically float in front of the screen while the page content recedes behind. Dismissing pushes the modal back through the screen plane.</p>
+          <div class="card-meta">Concept: Dialogs</div>
+        </div>
+
+        <div class="card">
+          <h3>Timeline Scrubbing</h3>
+          <p>A video editor timeline where the playhead floats above the tracks, clips have physical depth showing their layer order, and zooming in pushes you closer to the timeline surface.</p>
+          <div class="card-meta">Concept: Video Editor</div>
+        </div>
+
+        <div class="card">
+          <h3>Spatial Audio Mixer</h3>
+          <p>An audio mixing board where each channel strip has physical depth. Faders move in Z as well as Y, and the master bus sits closest to the viewer. Pan knobs rotate with real perspective.</p>
+          <div class="card-meta">Concept: Audio Production</div>
         </div>
       </div>
 
