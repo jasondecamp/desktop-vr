@@ -9,21 +9,16 @@ import {
 import { computeOffAxisFrustum } from '../../src/projection/frustum';
 
 const screen = screenFromViewport();
-
 const container = document.getElementById('scene')!;
 const statusEl = document.getElementById('status')!;
 const startBtn = document.getElementById('start-btn')!;
 
-// --- Three.js grid room as a background canvas layer ---
+// --- Three.js grid room background ---
 
 const gridCanvas = document.createElement('canvas');
 Object.assign(gridCanvas.style, {
-  position: 'fixed',
-  inset: '0',
-  width: '100%',
-  height: '100%',
-  zIndex: '-1',
-  pointerEvents: 'none',
+  position: 'fixed', inset: '0', width: '100%', height: '100%',
+  zIndex: '-1', pointerEvents: 'none',
 });
 document.body.insertBefore(gridCanvas, document.body.firstChild);
 
@@ -36,138 +31,380 @@ const gridScene = new THREE.Scene();
 const gridCamera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.01, 100);
 gridCamera.position.set(0, 0, 0.6);
 
-const gridRoom = new GridRoom(screen, {
-  depth: 0.60,
-  gridSpacing: 0.053,
-  showBackWall: false,
-});
+const gridRoom = new GridRoom(screen, { depth: 0.60, gridSpacing: 0.053 });
 gridScene.add(gridRoom.getGroup());
 
-let rawEyePos: EyePosition | null = null;
+let lastEyePos: EyePosition | null = null;
 
 function renderGrid() {
   requestAnimationFrame(renderGrid);
-
-  if (!rawEyePos) return;
-
-  // Grid is fixed to the viewport — no scroll offset
-  const eye = rawEyePos;
-
+  if (!lastEyePos) return;
   const viewportAspect = window.innerWidth / window.innerHeight;
-  const frustum = computeOffAxisFrustum(eye, screen, 0.01, 50, viewportAspect);
+  const frustum = computeOffAxisFrustum(lastEyePos, screen, 0.01, 50, viewportAspect);
   gridCamera.projectionMatrix.makePerspective(
-    frustum.left, frustum.right, frustum.top, frustum.bottom,
-    frustum.near, frustum.far,
+    frustum.left, frustum.right, frustum.top, frustum.bottom, frustum.near, frustum.far,
   );
   gridCamera.projectionMatrixInverse.copy(gridCamera.projectionMatrix).invert();
-  gridCamera.position.set(eye.x, eye.y, eye.z);
-  gridCamera.lookAt(eye.x, eye.y, 0);
-
+  gridCamera.position.set(lastEyePos.x, lastEyePos.y, lastEyePos.z);
+  gridCamera.lookAt(lastEyePos.x, lastEyePos.y, 0);
   gridRenderer.render(gridScene, gridCamera);
 }
 renderGrid();
 
-// --- Toggles ---
+// =====================================================
+// Spatial Navigation System
+// =====================================================
 
-document.querySelectorAll('[data-toggle]').forEach((track) => {
-  const status = track.nextElementSibling as HTMLElement;
-  track.addEventListener('click', () => {
-    const isOn = track.classList.toggle('on');
-    if (status) status.textContent = isOn ? 'On' : 'Off';
-  });
-});
+const MAX_DEPTH = 5;
+const TRANSITION_MS = 400;
+const Z_STEP = 100;       // px per background depth level
+const BLUR_STEP = 2;      // px blur per level
+const OPACITY_STEP = 0.3; // opacity reduction per level
 
-// --- Sliders ---
-
-document.querySelectorAll('[data-slider]').forEach((el) => {
-  const sliderEl = el as HTMLElement;
-  const fill = sliderEl.querySelector('.slider-fill') as HTMLElement;
-  const thumb = sliderEl.querySelector('.slider-thumb') as HTMLElement;
-  const valueEl = sliderEl.querySelector('.slider-value') as HTMLElement;
-  let percent = parseInt(sliderEl.dataset.value ?? '50', 10);
-  let dragging = false;
-
-  function update() {
-    fill.style.width = `${percent}%`;
-    thumb.style.left = `${percent}%`;
-    valueEl.textContent = Math.round(percent).toString();
-  }
-  update();
-
-  thumb.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
-
-  document.addEventListener('mousemove', (e) => {
-    if (!dragging) return;
-    const well = sliderEl.querySelector('.slider-well')!;
-    const rect = well.getBoundingClientRect();
-    percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    update();
-  });
-
-  document.addEventListener('mouseup', () => { dragging = false; });
-});
-
-// --- Knob (with drag overlay) ---
-
-const knob = document.getElementById('knob')!;
-const knobValue = document.getElementById('knob-value')!;
-let knobAngle = 200;
-
-function updateKnob(angle: number) {
-  knobAngle = Math.max(0, Math.min(300, angle));
-  const rotation = knobAngle - 150;
-  knob.style.transform = `translateZ(12px) rotate(${rotation}deg)`;
-  knobValue.textContent = `${Math.round((knobAngle / 300) * 100)}%`;
+interface NavPage {
+  id: string;
+  title: string;
+  subtitle?: string;
+  buildContent: (contentEl: HTMLElement) => void;
 }
-updateKnob(knobAngle);
 
-const dragOverlay = document.createElement('div');
-Object.assign(dragOverlay.style, {
-  position: 'fixed', inset: '0', zIndex: '9999', cursor: 'grabbing', display: 'none',
-});
-document.body.appendChild(dragOverlay);
+// Layer stack: index 0 = deepest background, last = foreground
+const layerStack: HTMLElement[] = [];
 
-let knobStartY = 0;
-let knobStartAngle = 0;
+function createLayerEl(): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'nav-layer';
+  return el;
+}
 
-knob.addEventListener('mousedown', (e: MouseEvent) => {
-  knobStartY = e.clientY;
-  knobStartAngle = knobAngle;
-  dragOverlay.style.display = 'block';
-  e.preventDefault();
-});
+function updateLayerStyles() {
+  const depth = layerStack.length;
+  layerStack.forEach((layer, i) => {
+    const levelsBack = depth - 1 - i;
+    // Reset all background-N classes
+    layer.className = 'nav-layer';
 
-dragOverlay.addEventListener('mousemove', (e: MouseEvent) => {
-  updateKnob(knobStartAngle + (knobStartY - e.clientY) * 1.5);
-});
-
-dragOverlay.addEventListener('mouseup', () => { dragOverlay.style.display = 'none'; });
-
-// --- Chips ---
-
-const chips = document.querySelectorAll('[data-chip]');
-chips.forEach((chip) => {
-  chip.addEventListener('click', () => {
-    chips.forEach((c) => { c.classList.remove('active'); c.classList.add('inactive'); });
-    chip.classList.remove('inactive');
-    chip.classList.add('active');
+    if (levelsBack === 0) {
+      // Foreground
+      layer.style.transform = 'translateZ(0px)';
+      layer.style.opacity = '1';
+      layer.style.filter = 'blur(0px)';
+      layer.style.pointerEvents = 'auto';
+    } else if (levelsBack < MAX_DEPTH) {
+      const z = -levelsBack * Z_STEP;
+      const blur = levelsBack * BLUR_STEP;
+      const opacity = Math.max(0.05, 1 - levelsBack * OPACITY_STEP);
+      layer.style.transform = `translateZ(${z}px)`;
+      layer.style.opacity = `${opacity}`;
+      layer.style.filter = `blur(${blur}px)`;
+      layer.style.pointerEvents = 'none';
+    } else {
+      layer.style.display = 'none';
+    }
   });
+}
+
+function pushPage(page: NavPage) {
+  const layer = createLayerEl();
+
+  // Build layer content
+  const content = document.createElement('div');
+  content.className = 'layer-content';
+
+  // Header with back button (if not root)
+  const header = document.createElement('div');
+  header.className = 'layer-header';
+
+  if (layerStack.length > 0) {
+    const backBtn = document.createElement('button');
+    backBtn.className = 'back-btn';
+    backBtn.textContent = 'Back';
+    backBtn.addEventListener('click', () => popPage());
+    header.appendChild(backBtn);
+  }
+
+  const title = document.createElement('h1');
+  title.className = 'layer-title';
+  title.textContent = page.title;
+  header.appendChild(title);
+  content.appendChild(header);
+
+  if (page.subtitle) {
+    const sub = document.createElement('p');
+    sub.className = 'layer-subtitle';
+    sub.textContent = page.subtitle;
+    content.appendChild(sub);
+  }
+
+  const bodyEl = document.createElement('div');
+  page.buildContent(bodyEl);
+  content.appendChild(bodyEl);
+
+  layer.appendChild(content);
+
+  // Start the layer in the "entering" position (in front, invisible)
+  layer.style.transform = 'translateZ(200px)';
+  layer.style.opacity = '0';
+  layer.style.filter = 'blur(0px)';
+
+  container.appendChild(layer);
+  layerStack.push(layer);
+
+  // Force reflow before transitioning
+  layer.offsetHeight;
+
+  // Animate all layers to their new positions
+  updateLayerStyles();
+}
+
+function popPage() {
+  if (layerStack.length <= 1) return;
+
+  const exitingLayer = layerStack.pop()!;
+
+  // Animate the exiting layer forward and fade out
+  exitingLayer.style.transform = 'translateZ(200px)';
+  exitingLayer.style.opacity = '0';
+  exitingLayer.style.pointerEvents = 'none';
+
+  // Animate remaining layers back to their new positions
+  updateLayerStyles();
+
+  // Remove the exiting layer after the transition
+  setTimeout(() => {
+    exitingLayer.remove();
+  }, TRANSITION_MS);
+}
+
+// --- Helper: create a nav card that pushes to a new page ---
+
+function addNavCard(
+  parent: HTMLElement,
+  title: string,
+  description: string,
+  targetPage: NavPage,
+) {
+  const card = document.createElement('div');
+  card.className = 'nav-card';
+  card.innerHTML = `
+    <h3>${title}</h3>
+    <p>${description}</p>
+    <div class="card-arrow">&rsaquo;</div>
+  `;
+  card.addEventListener('click', () => pushPage(targetPage));
+  parent.appendChild(card);
+}
+
+// =====================================================
+// Page Definitions
+// =====================================================
+
+// --- Level 3 (deepest) pages ---
+
+const filePreviewPage: NavPage = {
+  id: 'file-preview',
+  title: 'readme.md',
+  subtitle: 'File preview',
+  buildContent: (el) => {
+    el.innerHTML = `
+      <div class="detail-section">
+        <h4>File Info</h4>
+        <div class="detail-grid">
+          <div class="detail-stat"><div class="stat-value">2.4kb</div><div class="stat-label">Size</div></div>
+          <div class="detail-stat"><div class="stat-value">42</div><div class="stat-label">Lines</div></div>
+          <div class="detail-stat"><div class="stat-value">Mar 28</div><div class="stat-label">Modified</div></div>
+          <div class="detail-stat"><div class="stat-value">v3.1</div><div class="stat-label">Version</div></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>Content</h4>
+        <div class="detail-text" style="font-family: ui-monospace, 'SF Mono', monospace; font-size: 12px; background: #12122a; padding: 16px; border-radius: 10px; white-space: pre-line; border: 1px solid rgba(255,255,255,0.04);">
+# Project README
+
+This is a demonstration of spatial navigation
+using head-tracked parallax depth layers.
+
+Each level you navigate into pushes the previous
+view further into the background, creating a
+physical sense of depth in the interface.
+        </div>
+      </div>
+    `;
+  },
+};
+
+const taskDetailPage: NavPage = {
+  id: 'task-detail',
+  title: 'Implement parallax engine',
+  subtitle: 'Task details',
+  buildContent: (el) => {
+    el.innerHTML = `
+      <div class="detail-section">
+        <h4>Status</h4>
+        <div class="detail-grid">
+          <div class="detail-stat"><div class="stat-value" style="color: #44cc66;">Active</div><div class="stat-label">Status</div></div>
+          <div class="detail-stat"><div class="stat-value">High</div><div class="stat-label">Priority</div></div>
+          <div class="detail-stat"><div class="stat-value">Mar 30</div><div class="stat-label">Due Date</div></div>
+          <div class="detail-stat"><div class="stat-value">75%</div><div class="stat-label">Progress</div></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>Description</h4>
+        <div class="detail-text">Build the core parallax engine with face tracking, off-axis projection, and both CSS and Three.js adapters. Include calibration overlay and diagnostic tools.</div>
+      </div>
+      <div class="detail-section">
+        <h4>Tags</h4>
+        <div class="tag-row">
+          <span class="tag">engineering</span>
+          <span class="tag">3d</span>
+          <span class="tag">webgl</span>
+          <span class="tag">tracking</span>
+        </div>
+      </div>
+    `;
+  },
+};
+
+const settingsDetailPage: NavPage = {
+  id: 'settings-detail',
+  title: 'Display Settings',
+  subtitle: 'Configure display preferences',
+  buildContent: (el) => {
+    el.innerHTML = `
+      <div class="detail-section">
+        <h4>Preferences</h4>
+        <div class="detail-grid">
+          <div class="detail-stat"><div class="stat-value">96</div><div class="stat-label">PPI</div></div>
+          <div class="detail-stat"><div class="stat-value">60&deg;</div><div class="stat-label">Camera FOV</div></div>
+          <div class="detail-stat"><div class="stat-value">1-Euro</div><div class="stat-label">Filter</div></div>
+          <div class="detail-stat"><div class="stat-value">0.63cm</div><div class="stat-label">IPD</div></div>
+        </div>
+      </div>
+      <div class="detail-section">
+        <h4>About</h4>
+        <div class="detail-text">These settings are persisted to localStorage and restored on next load. Use the calibration panel (press backtick) for live adjustments.</div>
+      </div>
+    `;
+  },
+};
+
+// --- Level 2 pages ---
+
+const projectFilesPage: NavPage = {
+  id: 'project-files',
+  title: 'Project Files',
+  subtitle: 'Browse the file tree. Each file opens a preview.',
+  buildContent: (el) => {
+    addNavCard(el, 'readme.md', 'Project documentation — 2.4kb, modified Mar 28', filePreviewPage);
+    addNavCard(el, 'package.json', 'Dependencies and scripts — 1.1kb', filePreviewPage);
+    addNavCard(el, 'src/', 'Source directory — 14 files', filePreviewPage);
+    addNavCard(el, 'examples/', 'Demo applications — 4 directories', filePreviewPage);
+    addNavCard(el, 'tsconfig.json', 'TypeScript configuration — 0.5kb', filePreviewPage);
+  },
+};
+
+const projectTasksPage: NavPage = {
+  id: 'project-tasks',
+  title: 'Tasks',
+  subtitle: 'Active tasks for this project.',
+  buildContent: (el) => {
+    addNavCard(el, 'Implement parallax engine', 'High priority — 75% complete — Due Mar 30', taskDetailPage);
+    addNavCard(el, 'Add React hooks', 'Medium priority — Done', taskDetailPage);
+    addNavCard(el, 'Build aquarium demo', 'Low priority — In progress', taskDetailPage);
+    addNavCard(el, 'Write documentation', 'Medium priority — 50% complete', taskDetailPage);
+    addNavCard(el, 'Deploy to Vercel', 'High priority — Done', taskDetailPage);
+  },
+};
+
+const projectSettingsPage: NavPage = {
+  id: 'project-settings',
+  title: 'Settings',
+  subtitle: 'Project configuration and preferences.',
+  buildContent: (el) => {
+    addNavCard(el, 'Display Settings', 'PPI, camera FOV, smoothing filter', settingsDetailPage);
+    addNavCard(el, 'Calibration', 'Eye offset, screen dimensions', settingsDetailPage);
+    addNavCard(el, 'Build Configuration', 'Vite, TypeScript, entry points', settingsDetailPage);
+    addNavCard(el, 'Deployment', 'Vercel settings, environment variables', settingsDetailPage);
+  },
+};
+
+// --- Level 1 pages ---
+
+const parallaxProjectPage: NavPage = {
+  id: 'parallax-project',
+  title: 'parallax-display',
+  subtitle: 'Head-tracking parallax 3D display engine. Tap a section to explore.',
+  buildContent: (el) => {
+    addNavCard(el, 'Files', 'Browse source files and documentation', projectFilesPage);
+    addNavCard(el, 'Tasks', '5 active tasks, 2 completed', projectTasksPage);
+    addNavCard(el, 'Settings', 'Display, calibration, build config', projectSettingsPage);
+    addNavCard(el, 'Recent Activity', 'Commits, PRs, and deployments', projectTasksPage);
+  },
+};
+
+const designSystemPage: NavPage = {
+  id: 'design-system',
+  title: 'Design System',
+  subtitle: 'Component library and design tokens.',
+  buildContent: (el) => {
+    addNavCard(el, 'Components', 'Buttons, cards, toggles, inputs', projectFilesPage);
+    addNavCard(el, 'Tokens', 'Colors, typography, spacing', projectSettingsPage);
+    addNavCard(el, 'Icons', '48 icons across 6 categories', projectFilesPage);
+  },
+};
+
+const analyticsPage: NavPage = {
+  id: 'analytics',
+  title: 'Analytics',
+  subtitle: 'Usage metrics and performance data.',
+  buildContent: (el) => {
+    el.innerHTML = `
+      <div class="detail-section">
+        <h4>This Week</h4>
+        <div class="detail-grid">
+          <div class="detail-stat"><div class="stat-value">12.4k</div><div class="stat-label">Page Views</div></div>
+          <div class="detail-stat"><div class="stat-value">3.2k</div><div class="stat-label">Unique Visitors</div></div>
+          <div class="detail-stat"><div class="stat-value">2m 14s</div><div class="stat-label">Avg. Session</div></div>
+          <div class="detail-stat"><div class="stat-value">94</div><div class="stat-label">Lighthouse Score</div></div>
+        </div>
+      </div>
+    `;
+    addNavCard(el, 'Traffic Sources', 'Breakdown by referrer and campaign', projectSettingsPage);
+    addNavCard(el, 'Performance', 'Core Web Vitals and load times', projectSettingsPage);
+  },
+};
+
+// --- Root page (Level 0) ---
+
+const rootPage: NavPage = {
+  id: 'root',
+  title: 'Spatial Navigation',
+  subtitle: 'Click any card to navigate deeper. Each level pushes the previous view into the background with increasing blur and transparency. Press Back to return.',
+  buildContent: (el) => {
+    addNavCard(el, 'parallax-display', 'Head-tracking parallax engine — files, tasks, settings', parallaxProjectPage);
+    addNavCard(el, 'Design System', 'Component library, tokens, and icons', designSystemPage);
+    addNavCard(el, 'Analytics', 'Usage metrics and performance dashboards', analyticsPage);
+    addNavCard(el, 'Documentation', 'Guides, API reference, and examples', projectFilesPage);
+    addNavCard(el, 'Team', 'Members, roles, and permissions', projectTasksPage);
+  },
+};
+
+// --- Initialize with root page ---
+pushPage(rootPage);
+
+// --- Keyboard navigation ---
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Backspace' || (e.key === 'ArrowLeft' && e.altKey)) {
+    if (layerStack.length > 1) {
+      e.preventDefault();
+      popPage();
+    }
+  }
 });
 
-// --- Indicator cycling ---
-
-const indicators = Array.from(document.querySelectorAll('[data-indicator]'));
-const indicatorStates = ['green', 'yellow', 'off', 'off', 'red'];
-
-setInterval(() => {
-  const last = indicatorStates.pop()!;
-  indicatorStates.unshift(last);
-  indicators.forEach((ind, i) => { ind.className = `indicator ${indicatorStates[i]}`; });
-}, 2000);
-
-// --- Parallax engine ---
-// The CSS adapter gets scroll offset in pixels (same conversion as the grid).
-// Both use pixels_per_meter from the same screen config.
+// =====================================================
+// Parallax Engine
+// =====================================================
 
 const adapter = new CSSAdapter({ container, screen, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
@@ -176,7 +413,7 @@ const engine = new ParallaxEngine({
   tracking: { smoothing: 'one-euro' },
   onTrack: (pos) => {
     statusEl.textContent = 'tracking';
-    rawEyePos = pos;
+    lastEyePos = pos;
   },
   onTrackingLost: () => { statusEl.textContent = 'face not detected'; },
 });
@@ -184,8 +421,6 @@ const engine = new ParallaxEngine({
 new CalibrationPanel({ engine, startCollapsed: true });
 new CalibrationOverlay({ engine, autoStart: false });
 new DiagnosticOverlay({ engine });
-
-// --- Start ---
 
 startBtn.addEventListener('click', async () => {
   startBtn.style.display = 'none';
@@ -198,8 +433,6 @@ startBtn.addEventListener('click', async () => {
     startBtn.style.display = 'block';
   }
 });
-
-// --- Resize ---
 
 window.addEventListener('resize', () => {
   engine.updateScreenFromViewport();

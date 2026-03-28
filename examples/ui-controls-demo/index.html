@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Parallax Display — 3D UI Controls</title>
+  <title>Parallax Display — Spatial Navigation</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -11,376 +11,238 @@
       background: #0a0a14;
       color: #e0e0e0;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
     }
-
-    /* --- Scene (perspective host + scroll container) --- */
 
     #scene {
       width: 100vw;
-      min-height: 100vh;
+      height: 100vh;
       position: relative;
       transform-style: preserve-3d;
     }
 
-    /* --- Content column --- */
+    /* --- Navigation layers --- */
 
-    .content {
+    .nav-layer {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      padding: 48px 24px;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+                  filter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateZ(0px);
+      opacity: 1;
+      filter: blur(0px);
+      will-change: transform, opacity, filter;
+    }
+
+    /* Pushed-back layers */
+    .nav-layer.background-1 {
+      transform: translateZ(-100px);
+      opacity: 0.6;
+      filter: blur(2px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-2 {
+      transform: translateZ(-200px);
+      opacity: 0.35;
+      filter: blur(4px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-3 {
+      transform: translateZ(-300px);
+      opacity: 0.15;
+      filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-4 {
+      transform: translateZ(-400px);
+      opacity: 0.05;
+      filter: blur(8px);
+      pointer-events: none;
+    }
+
+    /* Entering layer (starts in front, animates to z=0) */
+    .nav-layer.entering {
+      transform: translateZ(200px);
+      opacity: 0;
+    }
+
+    /* Exiting layer (animates forward and fades) */
+    .nav-layer.exiting {
+      transform: translateZ(200px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Hidden (removed from view after exit animation) */
+    .nav-layer.hidden {
+      display: none;
+    }
+
+    /* --- Layer content --- */
+
+    .layer-content {
       max-width: 640px;
       margin: 0 auto;
-      padding: 60px 24px 120px;
-      transform-style: preserve-3d;
-      position: relative;
     }
 
-    .page-title {
-      font-size: 28px;
+    .layer-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .back-btn {
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #aab;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .layer-title {
+      font-size: 24px;
       font-weight: 700;
       color: #fff;
-      margin-bottom: 8px;
-      transform: translateZ(10px);
     }
 
-    .page-subtitle {
-      font-size: 15px;
+    .layer-subtitle {
+      font-size: 14px;
       color: #667;
-      margin-bottom: 48px;
-      line-height: 1.5;
-      transform: translateZ(4px);
+      margin-bottom: 32px;
+      line-height: 1.6;
     }
 
-    /* --- Section --- */
+    /* --- Nav cards --- */
 
-    .section {
-      margin-bottom: 40px;
-      transform-style: preserve-3d;
-    }
-
-    .section-label {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #556;
-      margin-bottom: 16px;
-      transform: translateZ(2px);
-    }
-
-    /* --- Card --- */
-
-    .card {
-      transform: translateZ(20px);
-      transform-style: preserve-3d;
-      background: #1e1e2e;
-      border-radius: 16px;
+    .nav-card {
+      background: #1a1a2e;
+      border-radius: 14px;
       padding: 24px;
+      margin-bottom: 12px;
       border: 1px solid rgba(255, 255, 255, 0.06);
-      transition: transform 0.25s ease;
       cursor: pointer;
-      margin-bottom: 16px;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
     }
 
-    .card:hover {
-      transform: translateZ(32px);
+    .nav-card:hover {
+      background: #1e1e34;
+      border-color: rgba(91, 106, 191, 0.3);
+      transform: translateX(4px);
     }
 
-    .card:active {
-      transform: translateZ(6px);
-      transition: transform 0.08s ease;
+    .nav-card:active {
+      transform: translateX(2px);
+      transition: transform 0.06s;
     }
 
-    .card h3 {
+    .nav-card h3 {
       font-size: 16px;
       font-weight: 600;
-      margin-bottom: 8px;
       color: #fff;
-      transform: translateZ(4px);
+      margin-bottom: 6px;
     }
 
-    .card p {
-      font-size: 14px;
+    .nav-card p {
+      font-size: 13px;
       color: #889;
-      line-height: 1.6;
-      transform: translateZ(2px);
+      line-height: 1.5;
     }
 
-    .card .card-meta {
-      font-size: 12px;
+    .nav-card .card-arrow {
+      float: right;
       color: #556;
-      margin-top: 12px;
-      transform: translateZ(1px);
+      font-size: 18px;
+      margin-top: -20px;
+      transition: color 0.15s, transform 0.15s;
     }
 
-    /* --- Inline control row --- */
+    .nav-card:hover .card-arrow {
+      color: #7c6dd8;
+      transform: translateX(3px);
+    }
 
-    .control-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      transform-style: preserve-3d;
+    /* --- Detail content --- */
+
+    .detail-section {
+      margin-bottom: 24px;
+    }
+
+    .detail-section h4 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #556;
+      margin-bottom: 12px;
+    }
+
+    .detail-text {
+      font-size: 14px;
+      color: #aab;
+      line-height: 1.7;
       margin-bottom: 16px;
     }
 
-    .control-row-label {
-      font-size: 14px;
-      color: #aab;
-      min-width: 80px;
-      transform: translateZ(2px);
-    }
-
-    /* --- Buttons --- */
-
-    .btn-row {
-      display: flex;
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
-      transform-style: preserve-3d;
-      flex-wrap: wrap;
+      margin-bottom: 16px;
     }
 
-    .btn {
-      transform: translateZ(18px);
-      transform-style: preserve-3d;
-      padding: 12px 24px;
-      border: none;
+    .detail-stat {
+      background: #12122a;
       border-radius: 10px;
-      font-size: 14px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      transition: transform 0.15s ease;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #5b6abf, #7c6dd8);
-      color: #fff;
-    }
-
-    .btn-secondary {
-      background: #2a2a3e;
-      color: #aab;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .btn-danger {
-      background: linear-gradient(135deg, #bf5b5b, #d86d6d);
-      color: #fff;
-    }
-
-    .btn:hover { transform: translateZ(26px); }
-    .btn:active { transform: translateZ(4px); transition: transform 0.06s ease; }
-
-    .btn .btn-label {
-      transform: translateZ(3px);
-      display: block;
-    }
-
-    /* --- Toggle --- */
-
-    .toggle-track {
-      width: 52px;
-      height: 28px;
-      border-radius: 14px;
-      background: #2a2a3e;
-      position: relative;
-      cursor: pointer;
-      transition: background 0.25s ease;
-      transform: translateZ(6px);
-      transform-style: preserve-3d;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      flex-shrink: 0;
-    }
-
-    .toggle-track.on { background: #5b6abf; }
-
-    .toggle-thumb {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #fff;
-      position: absolute;
-      top: 2px;
-      left: 3px;
-      transition: left 0.2s ease, transform 0.2s ease;
-      transform: translateZ(10px);
-    }
-
-    .toggle-track.on .toggle-thumb {
-      left: 27px;
-      transform: translateZ(14px);
-    }
-
-    .toggle-status {
-      font-size: 13px;
-      color: #889;
-      transform: translateZ(2px);
-    }
-
-    /* --- Slider --- */
-
-    .slider-container {
-      transform-style: preserve-3d;
-      position: relative;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      flex: 1;
-    }
-
-    .slider-well {
-      width: 100%;
-      height: 6px;
-      border-radius: 3px;
-      background: #1a1a2a;
-      transform: translateZ(-4px);
-      position: relative;
+      padding: 16px;
       border: 1px solid rgba(255, 255, 255, 0.04);
     }
 
-    .slider-fill {
-      height: 100%;
-      border-radius: 3px;
-      background: linear-gradient(90deg, #5b6abf, #7c6dd8);
-      width: 60%;
-      transform: translateZ(1px);
-    }
-
-    .slider-thumb {
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      background: #fff;
-      position: absolute;
-      top: 50%;
-      left: 60%;
-      transform: translateZ(16px) translate(-50%, -50%);
-      cursor: grab;
-      transition: transform 0.1s ease;
-      border: 2px solid rgba(91, 106, 191, 0.5);
-    }
-
-    .slider-thumb:hover {
-      transform: translateZ(22px) translate(-50%, -50%);
-    }
-
-    .slider-value {
-      font-size: 13px;
-      font-family: ui-monospace, 'SF Mono', monospace;
+    .detail-stat .stat-value {
+      font-size: 24px;
+      font-weight: 700;
       color: #7c6dd8;
-      min-width: 36px;
-      text-align: right;
-      margin-left: 12px;
-      transform: translateZ(4px);
-    }
-
-    /* --- Indicators --- */
-
-    .indicator-row {
-      display: flex;
-      gap: 10px;
-      transform-style: preserve-3d;
-    }
-
-    .indicator {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      transform: translateZ(-6px);
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      transition: background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
-    }
-
-    .indicator.off { background: #1a1a2a; }
-    .indicator.green { background: #44cc66; transform: translateZ(4px); box-shadow: 0 0 8px rgba(68, 204, 102, 0.4); }
-    .indicator.yellow { background: #ffaa33; transform: translateZ(4px); box-shadow: 0 0 8px rgba(255, 170, 51, 0.4); }
-    .indicator.red { background: #ff4444; transform: translateZ(4px); box-shadow: 0 0 8px rgba(255, 68, 68, 0.4); }
-
-    /* --- Knob --- */
-
-    .knob-row {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      transform-style: preserve-3d;
-    }
-
-    .knob-well {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: #0e0e1a;
-      transform: translateZ(-8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      flex-shrink: 0;
-    }
-
-    .knob {
-      width: 48px;
-      height: 48px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #2a2a3e, #3a3a52);
-      transform: translateZ(12px);
-      transform-style: preserve-3d;
-      cursor: grab;
-      position: relative;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .knob-marker {
-      position: absolute;
-      top: 4px;
-      left: 50%;
-      width: 3px;
-      height: 10px;
-      background: #7c6dd8;
-      border-radius: 2px;
-      transform: translateX(-50%) translateZ(4px);
-    }
-
-    .knob-value {
-      font-size: 14px;
       font-family: ui-monospace, 'SF Mono', monospace;
-      color: #7c6dd8;
-      transform: translateZ(2px);
     }
 
-    /* --- Chips --- */
+    .detail-stat .stat-label {
+      font-size: 12px;
+      color: #556;
+      margin-top: 4px;
+    }
 
-    .chip-row {
+    .tag-row {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      transform-style: preserve-3d;
     }
 
-    .chip {
-      transform: translateZ(12px);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: transform 0.15s ease;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .chip.active {
-      background: #5b6abf;
-      color: #fff;
-      transform: translateZ(18px);
-      border-color: transparent;
-    }
-
-    .chip.inactive {
-      background: #1e1e2e;
+    .tag {
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      background: #1a1a2e;
       color: #889;
-      transform: translateZ(8px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
     }
 
-    .chip:hover { transform: translateZ(22px); }
-
-    /* --- Start button overlay --- */
+    /* --- Start button --- */
 
     #start-btn {
       position: fixed;
@@ -415,172 +277,7 @@
   <button id="start-btn">Enable Head Tracking</button>
 
   <div id="scene">
-    <div class="content">
-      <h1 class="page-title">3D UI Controls</h1>
-      <p class="page-subtitle">Interface elements with physical depth. Buttons press into the screen, cards lift on hover, and everything shifts with your perspective. Scroll to see more.</p>
-
-      <!-- Cards -->
-      <div class="section">
-        <div class="section-label">Cards</div>
-
-        <div class="card">
-          <h3>Depth-Aware Notifications</h3>
-          <p>Important notifications could float closer to the viewer, creating a natural visual hierarchy that goes beyond z-index layering. Less important items recede into the background.</p>
-          <div class="card-meta">Concept: Notification Priority</div>
-        </div>
-
-        <div class="card">
-          <h3>Spatial Navigation</h3>
-          <p>Imagine navigating a file system where folders exist at the screen plane and opening one zooms you forward into a deeper layer. Breadcrumbs recede behind you as you go deeper.</p>
-          <div class="card-meta">Concept: File Explorer</div>
-        </div>
-
-        <div class="card">
-          <h3>Layered Editing</h3>
-          <p>A design tool where the canvas sits behind the screen, toolbars float in front, and inspectors pop forward on demand. The depth separation reduces visual clutter without hiding controls.</p>
-          <div class="card-meta">Concept: Design Tool</div>
-        </div>
-
-        <div class="card">
-          <h3>Focus Mode</h3>
-          <p>When editing a document, the focused paragraph could lift forward while surrounding text subtly recedes. Your eyes are naturally drawn to the elevated content.</p>
-          <div class="card-meta">Concept: Text Editor</div>
-        </div>
-      </div>
-
-      <!-- Buttons -->
-      <div class="section">
-        <div class="section-label">Buttons</div>
-        <div class="btn-row">
-          <button class="btn btn-primary"><span class="btn-label">Save Changes</span></button>
-          <button class="btn btn-secondary"><span class="btn-label">Cancel</span></button>
-          <button class="btn btn-danger"><span class="btn-label">Delete</span></button>
-        </div>
-      </div>
-
-      <!-- Toggles -->
-      <div class="section">
-        <div class="section-label">Toggles</div>
-
-        <div class="control-row">
-          <span class="control-row-label">Dark Mode</span>
-          <div class="toggle-track on" data-toggle>
-            <div class="toggle-thumb"></div>
-          </div>
-          <span class="toggle-status">On</span>
-        </div>
-
-        <div class="control-row">
-          <span class="control-row-label">Notifications</span>
-          <div class="toggle-track" data-toggle>
-            <div class="toggle-thumb"></div>
-          </div>
-          <span class="toggle-status">Off</span>
-        </div>
-
-        <div class="control-row">
-          <span class="control-row-label">Auto-save</span>
-          <div class="toggle-track on" data-toggle>
-            <div class="toggle-thumb"></div>
-          </div>
-          <span class="toggle-status">On</span>
-        </div>
-      </div>
-
-      <!-- Sliders -->
-      <div class="section">
-        <div class="section-label">Sliders</div>
-
-        <div class="control-row">
-          <span class="control-row-label">Brightness</span>
-          <div class="slider-container" data-slider data-value="75">
-            <div class="slider-well"><div class="slider-fill"></div></div>
-            <div class="slider-thumb"></div>
-            <span class="slider-value">75</span>
-          </div>
-        </div>
-
-        <div class="control-row">
-          <span class="control-row-label">Volume</span>
-          <div class="slider-container" data-slider data-value="40">
-            <div class="slider-well"><div class="slider-fill"></div></div>
-            <div class="slider-thumb"></div>
-            <span class="slider-value">40</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Knob + Indicators -->
-      <div class="section">
-        <div class="section-label">Rotary &amp; Status</div>
-
-        <div class="control-row">
-          <span class="control-row-label">Gain</span>
-          <div class="knob-row">
-            <div class="knob-well">
-              <div class="knob" id="knob">
-                <div class="knob-marker"></div>
-              </div>
-            </div>
-            <span class="knob-value" id="knob-value">65%</span>
-          </div>
-        </div>
-
-        <div class="control-row" style="margin-top: 8px;">
-          <span class="control-row-label">Status</span>
-          <div class="indicator-row">
-            <div class="indicator green" data-indicator></div>
-            <div class="indicator yellow" data-indicator></div>
-            <div class="indicator off" data-indicator></div>
-            <div class="indicator off" data-indicator></div>
-            <div class="indicator red" data-indicator></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Chips -->
-      <div class="section">
-        <div class="section-label">Filter Chips</div>
-        <div class="chip-row">
-          <div class="chip active" data-chip>All</div>
-          <div class="chip inactive" data-chip>Design</div>
-          <div class="chip inactive" data-chip>Code</div>
-          <div class="chip inactive" data-chip>Motion</div>
-          <div class="chip inactive" data-chip>3D</div>
-          <div class="chip inactive" data-chip>Audio</div>
-        </div>
-      </div>
-
-      <!-- More cards for scroll length -->
-      <div class="section">
-        <div class="section-label">More Concepts</div>
-
-        <div class="card">
-          <h3>Data Visualization</h3>
-          <p>Charts where the axes sit at the screen plane, data points float forward proportional to their value, and tooltips pop out toward the viewer. Bar charts become literal columns of depth.</p>
-          <div class="card-meta">Concept: Dashboard</div>
-        </div>
-
-        <div class="card">
-          <h3>Modal Dialogs</h3>
-          <p>Instead of a flat overlay with a dimmed backdrop, modals could physically float in front of the screen while the page content recedes behind. Dismissing pushes the modal back through the screen plane.</p>
-          <div class="card-meta">Concept: Dialogs</div>
-        </div>
-
-        <div class="card">
-          <h3>Timeline Scrubbing</h3>
-          <p>A video editor timeline where the playhead floats above the tracks, clips have physical depth showing their layer order, and zooming in pushes you closer to the timeline surface.</p>
-          <div class="card-meta">Concept: Video Editor</div>
-        </div>
-
-        <div class="card">
-          <h3>Spatial Audio Mixer</h3>
-          <p>An audio mixing board where each channel strip has physical depth. Faders move in Z as well as Y, and the master bus sits closest to the viewer. Pan knobs rotate with real perspective.</p>
-          <div class="card-meta">Concept: Audio Production</div>
-        </div>
-      </div>
-
-    </div>
+    <!-- Layers are created dynamically by the navigation system -->
   </div>
 
   <script type="module" src="./main.ts"></script>
