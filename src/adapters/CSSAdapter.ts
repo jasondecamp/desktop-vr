@@ -50,12 +50,9 @@ export class CSSAdapter {
     const perspectivePx = eye.z * pixelsPerMeter;
 
     // perspective-origin is relative to the container's top-left corner.
-    // X: centered on the container width, offset by eye X.
-    // Y: centered on the current viewport (scrollY + viewportH/2), offset by eye Y.
-    // This keeps the perspective origin tracking the visible area when scrolling.
+    const containerH = this.container.offsetHeight;
     const originX = (containerW / 2) + (eye.x * pixelsPerMeter * this.sensitivity);
-    const viewportCenterY = this.scrollOffsetY + window.innerHeight / 2;
-    const originY = viewportCenterY - (eye.y * pixelsPerMeter * this.sensitivity);
+    const originY = (containerH / 2) - (eye.y * pixelsPerMeter * this.sensitivity);
 
     this.container.style.perspective = `${perspectivePx}px`;
     this.container.style.perspectiveOrigin = `${originX}px ${originY}px`;
