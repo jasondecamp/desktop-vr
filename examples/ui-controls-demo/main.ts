@@ -43,29 +43,15 @@ const gridRoom = new GridRoom(screen, {
 });
 gridScene.add(gridRoom.getGroup());
 
-// --- Shared eye position with scroll offset ---
-// Both the CSS adapter and Three.js grid use the same adjusted eye position.
-// Scroll offset is converted to meters and applied to the Y axis so both
-// systems stay perfectly coordinated.
-
 let rawEyePos: EyePosition | null = null;
-const pixelsPerMeter = () => window.innerWidth / screen.widthMeters;
-
-function getScrollOffsetMeters(): number {
-  return window.scrollY / pixelsPerMeter();
-}
 
 function renderGrid() {
   requestAnimationFrame(renderGrid);
 
   if (!rawEyePos) return;
 
-  const scrollM = getScrollOffsetMeters();
-  const eye: EyePosition = {
-    x: rawEyePos.x,
-    y: rawEyePos.y + scrollM,
-    z: rawEyePos.z,
-  };
+  // Grid is fixed to the viewport — no scroll offset
+  const eye = rawEyePos;
 
   const viewportAspect = window.innerWidth / window.innerHeight;
   const frustum = computeOffAxisFrustum(eye, screen, 0.01, 50, viewportAspect);
@@ -198,14 +184,6 @@ const engine = new ParallaxEngine({
 new CalibrationPanel({ engine, startCollapsed: true });
 new CalibrationOverlay({ engine, autoStart: false });
 new DiagnosticOverlay({ engine });
-
-// --- Scroll → CSS adapter offset (in pixels, matching the grid's meter conversion) ---
-
-function onScroll() {
-  adapter.setScrollOffsetY(window.scrollY);
-}
-window.addEventListener('scroll', onScroll, { passive: true });
-onScroll();
 
 // --- Start ---
 
