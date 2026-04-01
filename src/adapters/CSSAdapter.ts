@@ -1,11 +1,20 @@
 import type { EyePosition } from '../tracking/types';
 import type { ScreenConfig } from '../projection/types';
+import { screenFromViewport } from '../projection/screenFromViewport';
 
 export interface CSSAdapterConfig {
   /** The container element that holds the depth-layered content */
   container: HTMLElement;
-  /** Physical screen dimensions */
-  screen: ScreenConfig;
+  /**
+   * Physical screen dimensions. If omitted, auto-computed from the
+   * browser viewport using CSS PPI (see `ppi` option).
+   */
+  screen?: ScreenConfig;
+  /**
+   * CSS pixels per physical inch, used to compute screen dimensions
+   * when `screen` is not provided. Default: 96
+   */
+  ppi?: number;
   /**
    * How aggressively to scale eye movement into perspective shift.
    * Higher = more dramatic parallax. Default: 1.0
@@ -31,7 +40,7 @@ export class CSSAdapter {
 
   constructor(config: CSSAdapterConfig) {
     this.container = config.container;
-    this.screen = config.screen;
+    this.screen = config.screen ?? screenFromViewport(config.ppi);
     this.sensitivity = config.sensitivity ?? 1.0;
 
     // Set up the container for CSS 3D

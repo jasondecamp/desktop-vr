@@ -1,15 +1,14 @@
-import { ParallaxEngine, CSSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, screenFromViewport } from '../../src/three';
-import type { EyePosition } from '../../src/three';
-
-const screen = screenFromViewport();
+// Public API equivalent:
+//   import { ParallaxEngine, CSSAdapter, CalibrationPanel } from 'parallax-display';
+import { ParallaxEngine, CSSAdapter, CalibrationPanel } from '../../src/index';
+import type { EyePosition } from '../../src/index';
 
 const container = document.getElementById('scene')!;
-container.style.visibility = 'hidden';
 const eyePosEl = document.getElementById('eye-pos')!;
 const statusEl = document.getElementById('status')!;
 const startBtn = document.getElementById('start-btn')!;
 
-const adapter = new CSSAdapter({ container, screen, sensitivity: 1.2 });
+const adapter = new CSSAdapter({ container, sensitivity: 1.2 });
 
 const engine = new ParallaxEngine({
   adapter,
@@ -24,11 +23,6 @@ const engine = new ParallaxEngine({
 });
 
 const panel = new CalibrationPanel({ engine, startCollapsed: true });
-const calibration = new CalibrationOverlay({
-  engine,
-  onDismiss: () => { container.style.visibility = 'visible'; },
-});
-const diagnostics = new DiagnosticOverlay({ engine });
 
 startBtn.addEventListener('click', async () => {
   startBtn.style.display = 'none';

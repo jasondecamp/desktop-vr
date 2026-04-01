@@ -1,12 +1,14 @@
 import * as THREE from 'three';
+// Public API equivalent:
+//   import { ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport, computeOffAxisFrustum } from 'parallax-display';
+//   import { CalibrationOverlay, DiagnosticOverlay, GridRoom } from 'parallax-display/three';
 import {
-  ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport,
+  ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport, computeOffAxisFrustum,
 } from '../../src/index';
 import type { EyePosition } from '../../src/index';
 import {
   CalibrationOverlay, DiagnosticOverlay, GridRoom,
 } from '../../src/three';
-import { computeOffAxisFrustum } from '../../src/projection/frustum';
 
 const screen = screenFromViewport();
 const container = document.getElementById('scene')!;
@@ -411,7 +413,7 @@ document.addEventListener('keydown', (e) => {
 // Parallax Engine
 // =====================================================
 
-const adapter = new CSSAdapter({ container, screen, sensitivity: 1.0 });
+const adapter = new CSSAdapter({ container, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
   adapter,
   persist: true,

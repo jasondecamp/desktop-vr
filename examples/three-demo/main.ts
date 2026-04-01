@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+// Public API equivalent:
+//   import { ParallaxEngine, ThreeJSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, GridRoom, screenFromViewport } from 'parallax-display/three';
 import { ParallaxEngine, ThreeJSAdapter, CalibrationPanel, CalibrationOverlay, DiagnosticOverlay, GridRoom, screenFromViewport } from '../../src/three';
 import type { EyePosition } from '../../src/three';
 
