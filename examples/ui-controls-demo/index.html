@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallax Display — Spatial Navigation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a14;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    #scene {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      transform-style: preserve-3d;
+    }
+
+    /* --- Navigation layers --- */
+
+    .nav-layer {
+      position: absolute;
+      inset: 0;
+      overflow-y: auto;
+      padding: 48px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* TODO: restore to 0.4s after testing */
+      transition: transform 1.6s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 1.6s cubic-bezier(0.4, 0, 0.2, 1),
+                  filter 1.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform: translateZ(0px);
+      opacity: 1;
+      filter: blur(0px);
+      will-change: transform, opacity, filter;
+    }
+
+    /* Pushed-back layers */
+    .nav-layer.background-1 {
+      transform: translateZ(-100px);
+      opacity: 0.6;
+      filter: blur(2px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-2 {
+      transform: translateZ(-200px);
+      opacity: 0.35;
+      filter: blur(4px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-3 {
+      transform: translateZ(-300px);
+      opacity: 0.15;
+      filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .nav-layer.background-4 {
+      transform: translateZ(-400px);
+      opacity: 0.05;
+      filter: blur(8px);
+      pointer-events: none;
+    }
+
+    /* Entering layer (starts in front, animates to z=0) */
+    .nav-layer.entering {
+      transform: translateZ(200px);
+      opacity: 0;
+    }
+
+    /* Exiting layer (animates forward and fades) */
+    .nav-layer.exiting {
+      transform: translateZ(200px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Hidden (removed from view after exit animation) */
+    .nav-layer.hidden {
+      display: none;
+    }
+
+    /* --- Layer content --- */
+
+    .layer-content {
+      width: 100%;
+      max-width: 640px;
+    }
+
+    .layer-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .back-btn {
+      background: none;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #aab;
+      font-size: 13px;
+      font-family: inherit;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .back-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .layer-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .layer-subtitle {
+      font-size: 14px;
+      color: #667;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    /* --- Nav cards --- */
+
+    .nav-card {
+      background: #1a1a2e;
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
+    }
+
+    .nav-card:hover {
+      background: #1e1e34;
+      border-color: rgba(91, 106, 191, 0.3);
+      transform: translateX(4px);
+    }
+
+    .nav-card:active {
+      transform: translateX(2px);
+      transition: transform 0.06s;
+    }
+
+    .nav-card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .nav-card p {
+      font-size: 13px;
+      color: #889;
+      line-height: 1.5;
+    }
+
+    .nav-card .card-arrow {
+      float: right;
+      color: #556;
+      font-size: 18px;
+      margin-top: -20px;
+      transition: color 0.15s, transform 0.15s;
+    }
+
+    .nav-card:hover .card-arrow {
+      color: #7c6dd8;
+      transform: translateX(3px);
+    }
+
+    /* --- Detail content --- */
+
+    .detail-section {
+      margin-bottom: 24px;
+    }
+
+    .detail-section h4 {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #556;
+      margin-bottom: 12px;
+    }
+
+    .detail-text {
+      font-size: 14px;
+      color: #aab;
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .detail-stat {
+      background: #12122a;
+      border-radius: 10px;
+      padding: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .detail-stat .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #7c6dd8;
+      font-family: ui-monospace, 'SF Mono', monospace;
+    }
+
+    .detail-stat .stat-label {
+      font-size: 12px;
+      color: #556;
+      margin-top: 4px;
+    }
+
+    .tag-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tag {
+      padding: 6px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      background: #1a1a2e;
+      color: #889;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* --- Start button --- */
+
+    #start-btn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20;
+      font-size: 18px;
+      padding: 16px 32px;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      background: rgba(10, 10, 20, 0.9);
+      color: #7c6dd8;
+      border-radius: 12px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    #start-btn:hover { background: rgba(20, 20, 40, 0.9); }
+
+    #status-overlay {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.3);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-overlay"><span id="status">not started</span></div>
+  <button id="start-btn">Enable Head Tracking</button>
+
+  <div id="scene">
+    <!-- Layers are created dynamically by the navigation system -->
+  </div>
+
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

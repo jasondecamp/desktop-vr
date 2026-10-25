@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ParallaxEngine } from './core/ParallaxEngine';
 import { CSSAdapter } from './adapters/CSSAdapter';
-import { screenFromViewport } from './projection/screenFromViewport';
 import type { ParallaxEngineConfig } from './core/ParallaxEngine';
 import type { CSSAdapterConfig } from './adapters/CSSAdapter';
 import type { EyePosition } from './tracking/types';
@@ -107,8 +106,7 @@ export function useParallaxCSS(
     const container = containerRef.current;
     if (!container) return;
 
-    const screen = screenFromViewport(ppi);
-    const adapter = new CSSAdapter({ container, screen, sensitivity });
+    const adapter = new CSSAdapter({ container, ppi, sensitivity });
 
     const engine = new ParallaxEngine({
       adapter,
