@@ -30,6 +30,7 @@
   "scripts": {
     "dev": "vite --config vite.site.config.ts",
     "build": "vite build && tsc --emitDeclarationOnly",
+    "prepare": "npm run build",
     "build:site": "vite build --config vite.site.config.ts",
     "preview": "vite preview --config vite.site.config.ts",
     "typecheck": "tsc --noEmit"
