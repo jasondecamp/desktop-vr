@@ -4,6 +4,8 @@ Head-tracking parallax 3D display engine that uses webcam-based eye tracking to 
 
 Inspired by [Johnny Lee's Wii Remote head tracking project](http://johnnylee.net/projects/wii/), rebuilt for the browser using MediaPipe face tracking and modern web APIs.
 
+**Live demos:** [ethereal.dev](https://ethereal.dev)
+
 ## How It Works
 
 A webcam tracks the viewer's eye position in real time using MediaPipe Face Mesh. The tracked position drives an off-axis (asymmetric) perspective projection that shifts based on where the viewer is relative to the screen. This makes the screen behave like a physical window — objects behind the screen recede as you move, objects in front pop out.
@@ -14,9 +16,13 @@ Two rendering backends are supported:
 
 ## Installation
 
+The package isn't published to npm yet. Install it straight from GitHub:
+
 ```bash
-npm install parallax-display
+npm install github:jasondecamp/desktop-vr
 ```
+
+npm clones the repo and runs the `prepare` script, which builds `dist/` on install. If your npm version asks you to approve install scripts, allow the build for `parallax-display` (`npm install-scripts approve parallax-display`). Without it, the package installs with no built files.
 
 ### Peer Dependencies
 
@@ -131,11 +137,11 @@ window.addEventListener('resize', () => {
 Add depth to any webpage without Three.js:
 
 ```typescript
-import { ParallaxEngine, CSSAdapter, screenFromViewport } from 'parallax-display';
+import { ParallaxEngine, CSSAdapter } from 'parallax-display';
 
-const screen = screenFromViewport();
+// Screen dimensions are auto-computed from the viewport when omitted
 const container = document.getElementById('scene');
-const adapter = new CSSAdapter({ container, screen });
+const adapter = new CSSAdapter({ container });
 const engine = new ParallaxEngine({ adapter });
 
 await engine.start();
@@ -568,7 +574,8 @@ new ThreeJSAdapter({
 ```typescript
 new CSSAdapter({
   container: HTMLElement,
-  screen: ScreenConfig,
+  screen?: ScreenConfig, // auto-computed from viewport if omitted
+  ppi?: number,          // used when screen is omitted (default: 96)
   sensitivity?: number,  // parallax intensity multiplier (default: 1.0)
 })
 ```
@@ -623,7 +630,8 @@ src/
     gridRoom.ts                 # viewport-anchored grid background (Three.js)
 examples/
   three-demo/                   # 3D targets in a grid room
-  css-demo/                     # depth-layered cards and shapes
+  css-demo/                     # depth-layered cards and shapes (no Three.js)
+  ui-controls-demo/             # spatial navigation through stacked depth layers
 ```
 
 ## Scripts
@@ -638,7 +646,7 @@ npm run typecheck  # type-check without emitting
 
 ## Deployment
 
-The project includes a Vercel configuration for one-click deployment. The demo site builds as a multi-page app (separate from the library build) with a landing page linking to both demos.
+The project includes a Vercel configuration for one-click deployment. The demo site builds as a multi-page app (separate from the library build) with a landing page linking to all three demos.
 
 ### Vercel (recommended)
 
