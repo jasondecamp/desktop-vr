@@ -187,6 +187,7 @@ const engine = new ParallaxEngine({
   tracking: { smoothing: 'one-euro' },
   onTrack: (pos: EyePosition) => {
     eyePosEl.textContent = `x: ${pos.x.toFixed(3)}, y: ${pos.y.toFixed(3)}, z: ${pos.z.toFixed(3)}`;
+    statusEl.textContent = 'tracking';
   },
   onTrackingLost: () => {
     statusEl.textContent = 'face not detected';
