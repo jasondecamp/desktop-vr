@@ -646,23 +646,26 @@ npm run typecheck  # type-check without emitting
 
 ## Deployment
 
-The project includes a Vercel configuration for one-click deployment. The demo site builds as a multi-page app (separate from the library build) with a landing page linking to all three demos.
+The demo site builds as a multi-page app (separate from the library build) with a landing page linking to all three demos.
 
-### Vercel (recommended)
+### ethereal.dev
 
-1. Import the repo at [vercel.com/new](https://vercel.com/new)
-2. Vercel auto-detects the config from `vercel.json` — no settings to change
-3. Deploys automatically on every push to `main`
+The live demos at [ethereal.dev](https://ethereal.dev) are served by the Vercel project `desktop-vr` (team DesktopVR), which is connected to this GitHub repo:
 
-Or deploy manually via CLI:
-
-```bash
-npx vercel --prod
-```
+- **Production:** merging a PR into `main` deploys to ethereal.dev. `main` is protected, so changes land through pull requests rather than direct pushes.
+- **Previews:** every PR gets its own preview deployment URL, posted on the PR.
 
 The `vercel.json` configures:
 - **Build command:** `npm run build:site`
 - **Output directory:** `dist-site`
+
+To deploy manually from a local checkout (for example, to roll forward without a PR), run `vercel --prod` from the repo root. This needs the Vercel CLI, logged in with access to the DesktopVR team.
+
+### Deploying your own copy
+
+1. Import the repo at [vercel.com/new](https://vercel.com/new)
+2. Vercel picks up the build settings from `vercel.json`, so there's nothing to configure
+3. Pushes to your production branch deploy automatically
 
 ### Other hosts
 
