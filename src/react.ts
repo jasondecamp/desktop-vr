@@ -5,6 +5,9 @@ import type { ParallaxEngineConfig } from './core/ParallaxEngine';
 import type { CSSAdapterConfig } from './adapters/CSSAdapter';
 import type { EyePosition } from './tracking/types';
 import type { ScreenConfig } from './projection/types';
+import type { EyeSource } from './sources/types';
+import { PointerSource } from './sources/PointerSource';
+import { ScrollSource } from './sources/ScrollSource';
 
 // Re-export core for convenience
 export * from './index';
@@ -16,9 +19,20 @@ export interface UseParallaxCSSOptions {
   sensitivity?: number;
   /** CSS pixels per physical inch. Default: 96 */
   ppi?: number;
-  /** Smoothing type. Default: 'one-euro' */
+  /** Smoothing type for the default webcam source. Default: 'one-euro' */
   smoothing?: 'none' | 'ema' | 'one-euro';
-  /** Auto-start tracking on mount. Default: true */
+  /**
+   * Where eye positions come from. Read on mount; change it later with
+   * `setSource()`. Default: the webcam (a FaceSource), as in v0.2.
+   */
+  source?: EyeSource;
+  /** Blend duration in ms when switching sources. Default: 500 */
+  blendMs?: number;
+  /**
+   * Start on mount. Default: true for pointer and scroll sources and when no
+   * source is given (v0.2); false for camera and tilt sources, which prompt
+   * for permission and should start from a deliberate `start()` call.
+   */
   autoStart?: boolean;
   /** Called each frame with eye position */
   onTrack?: (position: EyePosition) => void;
@@ -35,10 +49,21 @@ export interface UseParallaxReturn {
   tracking: boolean;
   /** Current eye position (updates each frame) */
   eyePosition: EyePosition | null;
-  /** Start tracking (requests camera permission) */
+  /** Start tracking (may request camera or motion permission) */
   start: () => Promise<void>;
   /** Stop tracking */
   stop: () => void;
+  /**
+   * Switch sources, blending from the current view. Call it from a user
+   * gesture when switching to the camera or tilt. Rejects (keeping the
+   * current source) if the new one can't start, e.g. permission denied.
+   */
+  setSource: (source: EyeSource) => Promise<void>;
+}
+
+/** Sources that need no permission prompt, so they can start on mount */
+function startsWithoutGesture(source: EyeSource | undefined): boolean {
+  return !source || source instanceof PointerSource || source instanceof ScrollSource;
 }
 
 // --- Hooks ---
@@ -61,6 +86,14 @@ export interface UseParallaxReturn {
  *   );
  * }
  * ```
+ *
+ * Starting without a camera, with the webcam as an opt-in:
+ * ```tsx
+ * const [pointer] = useState(() => new PointerSource());
+ * const { setSource } = useParallaxCSS(containerRef, { source: pointer });
+ * // in a click handler:
+ * setSource(new FaceSource()).catch((err) => showError(err.message));
+ * ```
  */
 export function useParallaxCSS(
   containerRef: React.RefObject<HTMLElement | null>,
@@ -70,7 +103,9 @@ export function useParallaxCSS(
     sensitivity = 1.0,
     ppi,
     smoothing = 'one-euro',
-    autoStart = true,
+    source,
+    blendMs,
+    autoStart = startsWithoutGesture(source),
     onTrack,
     onTrackingLost,
     onScreenChange,
@@ -88,6 +123,10 @@ export function useParallaxCSS(
   onTrackingLostRef.current = onTrackingLost;
   onScreenChangeRef.current = onScreenChange;
 
+  // The engine's current source, kept across engine re-creation (e.g. a
+  // sensitivity change) so it doesn't revert to the mount-time `source`
+  const sourceRef = useRef(source);
+
   const start = useCallback(async () => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -102,6 +141,16 @@ export function useParallaxCSS(
     setTracking(false);
   }, []);
 
+  const setSource = useCallback(async (next: EyeSource) => {
+    const engine = engineRef.current;
+    if (!engine) {
+      sourceRef.current = next;
+      return;
+    }
+    await engine.setSource(next);
+    sourceRef.current = engine.getSource();
+  }, []);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -111,6 +160,8 @@ export function useParallaxCSS(
     const engine = new ParallaxEngine({
       adapter,
       ppi,
+      source: sourceRef.current,
+      blendMs,
       tracking: { smoothing },
       onTrack: (pos) => {
         setEyePosition(pos);
@@ -141,7 +192,7 @@ export function useParallaxCSS(
       setTracking(false);
       setEyePosition(null);
     };
-  }, [containerRef, sensitivity, ppi, smoothing, autoStart]);
+  }, [containerRef, sensitivity, ppi, smoothing, blendMs, autoStart]);
 
   return {
     engine: engineRef.current,
@@ -149,6 +200,7 @@ export function useParallaxCSS(
     eyePosition,
     start,
     stop,
+    setSource,
   };
 }
 
@@ -170,6 +222,10 @@ export function useParallaxCSS(
  */
 export function useParallaxEngine(
   config: Omit<ParallaxEngineConfig, 'onTrack' | 'onTrackingLost' | 'onScreenChange'> & {
+    /**
+     * Start on mount. Default: true for pointer and scroll sources and when
+     * no source is given; false for camera and tilt sources.
+     */
     autoStart?: boolean;
     onTrack?: (position: EyePosition) => void;
     onTrackingLost?: () => void;
@@ -178,7 +234,8 @@ export function useParallaxEngine(
 ): UseParallaxReturn {
   const {
     adapter,
-    autoStart = true,
+    source,
+    autoStart = startsWithoutGesture(source),
     onTrack,
     onTrackingLost,
     onScreenChange,
@@ -196,6 +253,10 @@ export function useParallaxEngine(
   onTrackingLostRef.current = onTrackingLost;
   onScreenChangeRef.current = onScreenChange;
 
+  // The engine's current source, kept across engine re-creation (e.g. a
+  // sensitivity change) so it doesn't revert to the mount-time `source`
+  const sourceRef = useRef(source);
+
   const start = useCallback(async () => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -210,10 +271,21 @@ export function useParallaxEngine(
     setTracking(false);
   }, []);
 
+  const setSource = useCallback(async (next: EyeSource) => {
+    const engine = engineRef.current;
+    if (!engine) {
+      sourceRef.current = next;
+      return;
+    }
+    await engine.setSource(next);
+    sourceRef.current = engine.getSource();
+  }, []);
+
   useEffect(() => {
     const engine = new ParallaxEngine({
       adapter,
       ...engineConfig,
+      source: sourceRef.current,
       onTrack: (pos) => {
         setEyePosition(pos);
         onTrackRef.current?.(pos);
@@ -250,5 +322,6 @@ export function useParallaxEngine(
     eyePosition,
     start,
     stop,
+    setSource,
   };
 }

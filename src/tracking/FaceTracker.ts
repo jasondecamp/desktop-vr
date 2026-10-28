@@ -1,7 +1,8 @@
-import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import type { FaceLandmarker } from '@mediapipe/tasks-vision';
 import type { EyePosition, RawFaceData, TrackingConfig } from './types';
 import { EMAFilter, OneEuroFilter } from './filters';
 import type { CoordinateMapper } from '../projection/coordinateMapper';
+import { DEFAULT_MODEL_PATH, DEFAULT_WASM_PATH } from './mediapipe';
 
 // MediaPipe face mesh landmark indices
 const LEFT_IRIS = 468;           // left iris center
@@ -34,6 +35,8 @@ export class FaceTracker {
       maxFps: config.maxFps ?? 30,
       facingMode: config.facingMode ?? 'user',
       smoothing: config.smoothing ?? 'one-euro',
+      wasmPath: config.wasmPath ?? DEFAULT_WASM_PATH,
+      modelPath: config.modelPath ?? DEFAULT_MODEL_PATH,
       onTrack: config.onTrack ?? (() => {}),
       onTrackingLost: config.onTrackingLost ?? (() => {}),
     };
@@ -52,14 +55,13 @@ export class FaceTracker {
   }
 
   async initialize(): Promise<void> {
-    const vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm',
-    );
+    // Loaded on demand so consumers that never track faces never download it
+    const { FaceLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
+    const vision = await FilesetResolver.forVisionTasks(this.config.wasmPath);
 
     this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath:
-          'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        modelAssetPath: this.config.modelPath,
         delegate: 'GPU',
       },
       runningMode: 'VIDEO',

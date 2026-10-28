@@ -44,6 +44,10 @@ export interface TrackingConfig {
   facingMode?: 'user' | 'environment';
   /** Smoothing strategy. Default: 'one-euro' */
   smoothing?: 'none' | 'ema' | 'one-euro';
+  /** MediaPipe WASM fileset URL. Default: jsDelivr, pinned to MEDIAPIPE_VERSION */
+  wasmPath?: string;
+  /** Face landmarker model URL. Default: the public MediaPipe model bucket */
+  modelPath?: string;
   /** Callback fired each time a new eye position is computed */
   onTrack?: (position: EyePosition) => void;
   /** Callback fired when tracking is lost */

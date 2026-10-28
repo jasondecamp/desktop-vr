@@ -61,15 +61,21 @@ export class CSSAdapter {
     // perspective-origin is relative to the container's top-left corner,
     // but we anchor it to the viewport center so it stays correct when
     // the container is taller than the viewport (scrollable content).
+    // When the container scrolls inside an element rather than the window,
+    // setScrollOffsetY() supplies that element's scroll position.
     const originX = (containerW / 2) + (eye.x * pixelsPerMeter * this.sensitivity);
-    const viewportCenterY = window.scrollY + window.innerHeight / 2;
+    const viewportCenterY = window.scrollY + this.scrollOffsetY + window.innerHeight / 2;
     const originY = viewportCenterY - (eye.y * pixelsPerMeter * this.sensitivity);
 
     this.container.style.perspective = `${perspectivePx}px`;
     this.container.style.perspectiveOrigin = `${originX}px ${originY}px`;
   }
 
-  /** Set a vertical pixel offset added to the perspective origin (e.g., from scroll position) */
+  /**
+   * Vertical pixel offset added to the perspective origin. Use it when the
+   * container scrolls inside an element instead of the window: pass that
+   * element's `scrollTop` so the vanishing point stays centered on screen.
+   */
   setScrollOffsetY(px: number): void {
     this.scrollOffsetY = px;
   }

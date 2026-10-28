@@ -1,8 +1,10 @@
 import type { EyePosition, RawFaceData, TrackingConfig } from '../tracking/types';
 import type { CalibrationConfig, ScreenConfig } from '../projection/types';
 import { CoordinateMapper } from '../projection/coordinateMapper';
-import { FaceTracker } from '../tracking/FaceTracker';
 import { screenFromViewport } from '../projection/screenFromViewport';
+import { FaceSource } from '../sources/FaceSource';
+import type { EyeSource } from '../sources/types';
+import { Transition } from './transition';
 import type { ThreeJSAdapter } from '../adapters/ThreeJSAdapter';
 import type { CSSAdapter } from '../adapters/CSSAdapter';
 import type { EMAFilter, OneEuroFilter } from '../tracking/filters';
@@ -16,7 +18,14 @@ export interface ParallaxEngineConfig {
    * browser viewport size using CSS PPI (see `ppi` option).
    */
   screen?: Partial<ScreenConfig>;
+  /**
+   * Where eye positions come from. If omitted, a `FaceSource` (webcam) is
+   * built from `tracking` and `calibration`, as in v0.2.
+   */
+  source?: EyeSource;
+  /** Camera calibration, applied to the default face source */
   calibration?: Partial<CalibrationConfig>;
+  /** Face tracking options for the default face source */
   tracking?: Omit<TrackingConfig, 'onTrack' | 'onTrackingLost'>;
   /**
    * CSS pixels per physical inch, used to compute screen dimensions
@@ -24,9 +33,17 @@ export interface ParallaxEngineConfig {
    * Default: 96 (CSS standard, close for most desktop monitors).
    */
   ppi?: number;
+  /**
+   * Duration in ms of the eased blend when switching sources or reacquiring
+   * after a loss. Default: 500
+   */
+  blendMs?: number;
   /** Called each frame with the current eye position */
   onTrack?: (position: EyePosition) => void;
-  /** Called when face tracking is lost */
+  /**
+   * Called when the source loses tracking (e.g. no face in frame). The view
+   * holds its last position until tracking returns.
+   */
   onTrackingLost?: () => void;
   /** Called when screen config changes (PPI update, resize, etc.) */
   onScreenChange?: (screen: ScreenConfig) => void;
@@ -35,15 +52,27 @@ export interface ParallaxEngineConfig {
 export class ParallaxEngine {
   private adapter: Adapter;
   private coordinateMapper: CoordinateMapper;
-  private faceTracker: FaceTracker;
+  private source: EyeSource;
+  /** A source passed to setSource() that is still starting */
+  private pendingSource: EyeSource | null = null;
+  private pendingTarget: EyePosition | null = null;
+  private running = false;
+  /** True until the viewport-derived screen size has been computed */
+  private screenPending: boolean;
   private onTrack?: (position: EyePosition) => void;
   private onTrackingLost?: () => void;
   private onScreenChange?: (screen: ScreenConfig) => void;
-  private initialized = false;
   private lastEyePosition: EyePosition | null = null;
   private eyeOffset: EyePosition = { x: 0, y: 0, z: 0 };
   private ppi: number;
   private calibrationPaused = false;
+  private blendMs: number;
+  /** Latest position from the active source; null when lost or not yet reported */
+  private target: EyePosition | null = null;
+  private transition: Transition | null = null;
+  private frameId: number | null = null;
+  /** Blend from the last output on the next emit (after a restart) */
+  private blendOnNextEmit = false;
 
   constructor(config: ParallaxEngineConfig) {
     this.adapter = config.adapter;
@@ -51,57 +80,122 @@ export class ParallaxEngine {
     this.onTrack = config.onTrack;
     this.onTrackingLost = config.onTrackingLost;
     this.onScreenChange = config.onScreenChange;
+    this.blendMs = config.blendMs ?? 500;
 
-    // Auto-compute screen dimensions from viewport if not provided
-    const screenConfig = config.screen?.widthMeters && config.screen?.heightMeters
-      ? config.screen
-      : screenFromViewport(this.ppi);
+    // Screen dimensions come from the viewport unless both are given.
+    // Computed lazily so constructing an engine never touches `window`.
+    const fullScreen = config.screen?.widthMeters && config.screen?.heightMeters;
+    this.screenPending = !fullScreen;
 
     this.coordinateMapper = new CoordinateMapper(
-      screenConfig,
+      fullScreen ? config.screen : {},
       config.calibration,
     );
 
-    this.faceTracker = new FaceTracker(this.coordinateMapper, {
+    this.source = config.source ?? new FaceSource({
       ...config.tracking,
-      onTrack: this.handleTrack,
-      onTrackingLost: this.handleTrackingLost,
+      mapper: this.coordinateMapper,
     });
   }
 
   async start(): Promise<void> {
-    if (!this.initialized) {
-      await this.faceTracker.initialize();
-      this.initialized = true;
-    }
-    this.faceTracker.start();
+    this.running = true;
+    this.target = null;
+    this.blendOnNextEmit = this.lastEyePosition !== null;
+    await this.startSource(this.source);
   }
 
   stop(): void {
-    this.faceTracker.stop();
+    this.running = false;
+    this.cancelPending();
+    this.source.stop();
+    this.endTransition();
   }
 
   destroy(): void {
-    this.faceTracker.destroy();
-    this.initialized = false;
+    this.running = false;
+    this.cancelPending();
+    this.source.destroy();
+    this.endTransition();
+  }
+
+  getSource(): EyeSource {
+    return this.source;
+  }
+
+  /**
+   * Switch where eye positions come from. On a running engine the new source
+   * is started first (the current one keeps driving the view meanwhile, e.g.
+   * while the camera opens), then the previous source is destroyed and the
+   * output blends to the new one over `blendMs`. If the new source fails to
+   * start, the current one stays and the error is rethrown.
+   *
+   * The previous source is destroyed, releasing its camera or listeners;
+   * sources can be started again, so passing it back later works.
+   */
+  async setSource(source: EyeSource): Promise<void> {
+    if (source === this.source) {
+      this.cancelPending();
+      return;
+    }
+    if (!this.running) {
+      this.cancelPending();
+      this.source.destroy();
+      this.source = source;
+      return;
+    }
+
+    this.cancelPending();
+    this.pendingSource = source;
+    this.pendingTarget = null;
+    try {
+      await this.startSource(source);
+    } catch (err) {
+      if (this.pendingSource === source) this.pendingSource = null;
+      throw err;
+    }
+    if (this.pendingSource !== source) {
+      // Superseded by another setSource(), or the engine stopped meanwhile
+      source.destroy();
+      return;
+    }
+
+    const previous = this.source;
+    this.source = source;
+    this.pendingSource = null;
+    this.target = this.pendingTarget;
+    this.pendingTarget = null;
+    previous.destroy();
+    this.beginTransition();
   }
 
   updateCalibration(updates: Partial<CalibrationConfig>): void {
     this.coordinateMapper.updateCalibration(updates);
+    for (const source of [this.source, this.pendingSource]) {
+      if (source instanceof FaceSource && source.getCoordinateMapper() !== this.coordinateMapper) {
+        source.updateCalibration(updates);
+      }
+    }
   }
 
   updateScreen(updates: Partial<ScreenConfig>): void {
+    this.resolveScreen();
     this.coordinateMapper.updateScreen(updates);
     const current = this.coordinateMapper.getScreenConfig();
     this.adapter.updateScreen(current);
+    this.source.updateScreen?.(current);
+    this.pendingSource?.updateScreen?.(current);
     this.onScreenChange?.(current);
   }
 
   /** Recompute screen dimensions from current viewport size + PPI */
   updateScreenFromViewport(): void {
     const screen = screenFromViewport(this.ppi);
+    this.screenPending = false;
     this.coordinateMapper.updateScreen(screen);
     this.adapter.updateScreen(screen);
+    this.source.updateScreen?.(screen);
+    this.pendingSource?.updateScreen?.(screen);
     this.onScreenChange?.(screen);
   }
 
@@ -119,31 +213,34 @@ export class ParallaxEngine {
   }
 
   getScreenConfig(): ScreenConfig {
+    this.resolveScreen();
     return this.coordinateMapper.getScreenConfig();
   }
 
   getCalibrationConfig(): CalibrationConfig {
-    return this.coordinateMapper.getCalibrationConfig();
+    return this.faceSource()?.getCalibrationConfig() ?? this.coordinateMapper.getCalibrationConfig();
   }
 
+  // Face-only accessors: null / 'none' / no-op when the source isn't a FaceSource
+
   getVideoElement(): HTMLVideoElement | null {
-    return this.faceTracker.getVideoElement();
+    return this.faceSource()?.getVideoElement() ?? null;
   }
 
   getSmoothingType(): 'none' | 'ema' | 'one-euro' {
-    return this.faceTracker.getSmoothingType();
+    return this.faceSource()?.getSmoothingType() ?? 'none';
   }
 
   setSmoothing(type: 'none' | 'ema' | 'one-euro'): void {
-    this.faceTracker.setSmoothing(type);
+    this.faceSource()?.setSmoothing(type);
   }
 
   getFilter(): EMAFilter | OneEuroFilter | null {
-    return this.faceTracker.getFilter();
+    return this.faceSource()?.getFilter() ?? null;
   }
 
   getRawFaceData(): RawFaceData | null {
-    return this.faceTracker.getRawFaceData();
+    return this.faceSource()?.getRawFaceData() ?? null;
   }
 
   getAdapter(): Adapter {
@@ -172,8 +269,105 @@ export class ParallaxEngine {
     this.calibrationPaused = false;
   }
 
-  private handleTrack = (position: EyePosition): void => {
-    this.lastEyePosition = position;
+  private faceSource(): FaceSource | null {
+    return this.source instanceof FaceSource ? this.source : null;
+  }
+
+  private resolveScreen(): void {
+    if (!this.screenPending) return;
+    this.screenPending = false;
+    this.coordinateMapper.updateScreen(screenFromViewport(this.ppi));
+  }
+
+  private startSource(source: EyeSource): Promise<void> {
+    source.updateScreen?.(this.getScreenConfig());
+    return source.start(
+      (position) => {
+        if (source === this.source) {
+          this.handleTrack(position);
+        } else if (source === this.pendingSource) {
+          this.pendingTarget = position;
+        }
+      },
+      () => {
+        if (source === this.source) {
+          this.handleTrackingLost();
+        } else if (source === this.pendingSource) {
+          this.pendingTarget = null;
+        }
+      },
+    );
+  }
+
+  private cancelPending(): void {
+    if (!this.pendingSource) return;
+    // Its in-flight setSource() sees it was superseded and destroys it
+    this.pendingSource.stop();
+    this.pendingSource = null;
+    this.pendingTarget = null;
+  }
+
+  /**
+   * Blend from the current output toward the target. With no target yet
+   * (a new source that hasn't reported), the view holds until one arrives.
+   */
+  private beginTransition(): void {
+    if (!this.target) {
+      this.endTransition();
+      return;
+    }
+    if (!this.lastEyePosition || this.blendMs <= 0) {
+      this.endTransition();
+      this.output(this.target);
+      return;
+    }
+    this.transition = new Transition(this.lastEyePosition, now(), this.blendMs);
+    if (this.frameId === null) this.frameId = requestAnimationFrame(this.tick);
+  }
+
+  private endTransition(): void {
+    this.transition = null;
+    if (this.frameId !== null) {
+      cancelAnimationFrame(this.frameId);
+      this.frameId = null;
+    }
+  }
+
+  private tick = (): void => {
+    this.frameId = null;
+    const transition = this.transition;
+    if (!transition || !this.target) return;
+    const t = now();
+    this.output(transition.sample(this.target, t));
+    if (transition.isDone(t)) {
+      this.transition = null;
+    } else {
+      this.frameId = requestAnimationFrame(this.tick);
+    }
+  };
+
+  private handleTrack(position: EyePosition): void {
+    const reacquired = this.target === null;
+    this.target = position;
+    if (this.blendOnNextEmit || (reacquired && this.lastEyePosition)) {
+      // The target just jumped (after a loss, a restart or a source
+      // switch): blend from where the output is now
+      this.blendOnNextEmit = false;
+      this.beginTransition();
+    } else if (!this.transition) {
+      this.output(position);
+    }
+  }
+
+  private handleTrackingLost(): void {
+    // Hold the view where it is; reacquiring blends from here
+    this.target = null;
+    this.endTransition();
+    this.onTrackingLost?.();
+  }
+
+  private output(position: EyePosition): void {
+    this.lastEyePosition = { ...position };
     const adjusted: EyePosition = {
       x: position.x - this.eyeOffset.x,
       y: position.y - this.eyeOffset.y,
@@ -183,9 +377,9 @@ export class ParallaxEngine {
       this.adapter.update(adjusted);
     }
     this.onTrack?.(adjusted);
-  };
+  }
+}
 
-  private handleTrackingLost = (): void => {
-    this.onTrackingLost?.();
-  };
+function now(): number {
+  return performance.now();
 }

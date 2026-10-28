@@ -1,6 +1,6 @@
 # parallax-display
 
-Head-tracking parallax 3D display engine that uses webcam-based eye tracking to create the illusion of depth on a flat screen. Move your head and the screen becomes a window into a virtual 3D space.
+Head-tracking parallax 3D display engine that creates the illusion of depth on a flat screen. Move your head and the screen becomes a window into a virtual 3D space. The view can be driven by webcam eye tracking, the pointer, page scroll, or device tilt, and can switch between them live.
 
 Inspired by [Johnny Lee's Wii Remote head tracking project](http://johnnylee.net/projects/wii/), rebuilt for the browser using MediaPipe face tracking and modern web APIs.
 
@@ -8,7 +8,7 @@ Inspired by [Johnny Lee's Wii Remote head tracking project](http://johnnylee.net
 
 ## How It Works
 
-A webcam tracks the viewer's eye position in real time using MediaPipe Face Mesh. The tracked position drives an off-axis (asymmetric) perspective projection that shifts based on where the viewer is relative to the screen. This makes the screen behave like a physical window — objects behind the screen recede as you move, objects in front pop out.
+An eye position (where the viewer's eyes are relative to the screen) drives the projection. It comes from a **source**: the pointer, the page's scroll position, device tilt, or a webcam (see [Sources](#sources)). With the webcam, MediaPipe tracks the viewer's eye position in real time using MediaPipe Face Mesh. The position drives an off-axis (asymmetric) perspective projection that shifts based on where the viewer is relative to the screen. This makes the screen behave like a physical window — objects behind the screen recede as you move, objects in front pop out.
 
 Two rendering backends are supported:
 - **Three.js** — full 3D scenes with geometric depth and off-axis projection
@@ -19,18 +19,18 @@ Two rendering backends are supported:
 The package isn't published to npm yet. Install it straight from GitHub:
 
 ```bash
-npm install github:jasondecamp/desktop-vr
+npm install github:jasondecamp/desktop-vr#semver:^0.3.0
 ```
 
-npm clones the repo and runs the `prepare` script, which builds `dist/` on install. If your npm version asks you to approve install scripts, allow the build for `parallax-display` (`npm install-scripts approve parallax-display`). Without it, the package installs with no built files.
+The `#semver:` range picks the newest matching release tag. npm clones the repo and runs the `prepare` script, which builds `dist/` on install. If your npm version asks you to approve install scripts, allow the build for `parallax-display` (`npm install-scripts approve parallax-display`). Without it, the package installs with no built files.
 
 ### Peer Dependencies
 
-The library requires `@mediapipe/tasks-vision` for face tracking. Three.js and React are optional depending on which entry points you use.
+All peer dependencies are optional, depending on what you use:
 
 ```bash
-# Required
-npm install @mediapipe/tasks-vision
+# Only for webcam tracking (FaceSource, or an engine with no source)
+npm install @mediapipe/tasks-vision@0.10.34
 
 # Optional (only for parallax-display/three)
 npm install three
@@ -45,12 +45,16 @@ The library is split into three entry points to keep your bundle lean:
 
 ### `parallax-display` — Core (no Three.js or React dependency)
 
-Includes the engine, CSS adapter, face tracking, projection math, filters, and the CalibrationPanel (DOM-only UI).
+Includes the engine, CSS adapter, sources, face tracking, projection math, filters, and the CalibrationPanel (DOM-only UI).
 
 ```typescript
 import {
   ParallaxEngine,
   CSSAdapter,
+  PointerSource,
+  ScrollSource,
+  OrientationSource,
+  FaceSource,
   CalibrationPanel,
   FaceTracker,
   CoordinateMapper,
@@ -86,6 +90,99 @@ import {
   useParallaxEngine,
 } from 'parallax-display/react';
 ```
+
+## Sources
+
+A source produces eye positions for the engine. Pass one as `source`, and switch live with `engine.setSource()`:
+
+```typescript
+import { ParallaxEngine, CSSAdapter, PointerSource, FaceSource } from 'parallax-display';
+
+const engine = new ParallaxEngine({
+  adapter: new CSSAdapter({ container }),
+  source: new PointerSource(),  // no permission prompt
+});
+await engine.start();
+
+// Later, from a click: opt in to the webcam
+cameraButton.onclick = () =>
+  engine.setSource(new FaceSource()).catch((err) => showError(err.message));
+```
+
+With no `source`, the engine uses the webcam (`FaceSource`) built from the `tracking` and `calibration` options, exactly as in v0.2.
+
+| Source | Input | Permission | Notes |
+|--------|-------|------------|-------|
+| `PointerSource` | Mouse or trackpad over the window | None | Touch is ignored (dragging is scrolling) |
+| `ScrollSource` | Scroll position of an element | None | Pointer is ignored |
+| `OrientationSource` | Device tilt | iOS motion prompt | `start()` / `setSource()` must run in a user gesture |
+| `FaceSource` | Webcam + MediaPipe | Camera prompt | MediaPipe is loaded on first start |
+
+**Switching.** `setSource()` starts the new source while the current one keeps driving the view (so the pointer still works while the camera opens), then blends from the current view to the new source over `blendMs` (default 500, eased), so the view never jumps. If the new source fails to start (permission denied, no sensor), the current one stays and the promise rejects. The previous source is destroyed, which turns the camera off; sources can be started again, so you can pass one back later.
+
+**Losing tracking.** When a source loses tracking (no face in frame), the view holds where it is and `onTrackingLost` fires. When tracking returns, the view blends back from where it was held.
+
+### `PointerSource`
+
+The pointer acts as a virtual head at a fixed distance. Moving to the viewport edge leans the eye toward that side of the screen.
+
+```typescript
+const pointer = new PointerSource({
+  distance: 0.6,      // meters from the screen (EyePosition.z)
+  range: 0.75,        // viewport edge = 75% of the screen's half-width (1.0 puts the vanishing point under the cursor)
+  restOnLeave: true,  // ease back to center when the pointer leaves the window
+  easeMs: 400,        // duration of that ease, and of easing in on entry
+});
+pointer.setDistance(0.7); // e.g. a slight dolly during a transition; applied immediately
+```
+
+The engine passes its screen size to the source, so `range` stays proportional to the viewport after resizes and PPI changes.
+
+### `ScrollSource`
+
+The scroll position of an element acts as a virtual head that rises and falls with the page: at the top of the content the eye is raised, at the bottom it's lowered. Scrolling the front layer slides the depth layers behind it. Built for layered UIs where each layer scrolls inside a fixed 3D container:
+
+```typescript
+const scroll = new ScrollSource({
+  element: frontLayer, // the scroll container to follow
+  distance: 0.6,
+  range: 0.5,          // top/bottom = 50% of the screen's half-height
+});
+// When a different layer comes to the front:
+scroll.setElement(newFrontLayer); // eases to the new layer's scroll position
+```
+
+Content that doesn't scroll sits at center. Horizontal position stays centered.
+
+### `OrientationSource`
+
+Phone or tablet tilt, measured from how the device was held when it started (`recenter()` resets that). On iOS, starting it shows the motion permission prompt, so call `start()` or `setSource()` directly from a tap:
+
+```typescript
+tiltButton.onclick = () =>
+  engine.setSource(new OrientationSource({ maxTiltDegrees: 20 }))
+    .catch((err) => showError(err.message)); // e.g. "Motion and orientation access was denied"
+```
+
+### `FaceSource`
+
+Webcam head tracking. Options are the `tracking` options plus `calibration` and the MediaPipe asset locations:
+
+```typescript
+new FaceSource({
+  smoothing: 'one-euro',
+  wasmPath: '/mediapipe/wasm',                    // default: jsDelivr, pinned to MEDIAPIPE_VERSION
+  modelPath: '/mediapipe/face_landmarker.task',   // default: Google's public model bucket
+});
+```
+
+- **Lazy MediaPipe.** `@mediapipe/tasks-vision` is imported dynamically the first time a face source starts. The core bundle doesn't include it, and pages that never use the camera never download it.
+- **Pinned assets.** The default WASM URL is pinned to `MEDIAPIPE_VERSION` (`0.10.34`), which must match the installed `@mediapipe/tasks-vision` (the peer dependency is pinned to it). To use another version, or to self-host, set `wasmPath` to WASM files from the version you have installed.
+- **No calibration required.** Without calibration, eye positions are used as measured: centered means directly in front of the middle of the screen, with camera placement from the `CalibrationConfig` defaults. The calibration overlay and panel are optional developer tools.
+
+### Server rendering
+
+Importing any entry point (`parallax-display`, `/three`, `/react`) under Node is safe: nothing touches `window`, `document`, or `navigator` at import time or in constructors, and the React hooks only create the engine in an effect. Pages that import the package can be prerendered.
 
 ## Integration Guide
 
@@ -362,11 +459,17 @@ function ParallaxScene() {
 |--------|---------|-------------|
 | `sensitivity` | `1.0` | CSS parallax intensity multiplier |
 | `ppi` | `96` | CSS pixels per physical inch |
-| `smoothing` | `'one-euro'` | Filter type |
-| `autoStart` | `true` | Start tracking on mount |
+| `smoothing` | `'one-euro'` | Filter type (webcam only) |
+| `source` | webcam | Initial `EyeSource`; change it later with `setSource` |
+| `blendMs` | `500` | Blend duration when switching sources |
+| `autoStart` | see below | Start tracking on mount |
 | `onTrack` | — | Callback each frame with `EyePosition` |
 | `onTrackingLost` | — | Callback when face not detected |
 | `onScreenChange` | — | Callback when screen config changes |
+
+`autoStart` defaults to `true` for `PointerSource` and `ScrollSource` (and when no `source` is given, as in v0.2), and to `false` for `FaceSource` and `OrientationSource`, which show a permission prompt and should start from a deliberate `start()` or `setSource()` call.
+
+`source` is read on mount. Create it once (for example `useState(() => new PointerSource())`) rather than inline on every render.
 
 **Returns:**
 
@@ -377,6 +480,7 @@ function ParallaxScene() {
 | `eyePosition` | `EyePosition \| null` | Current eye position (updates each frame) |
 | `start` | `() => Promise<void>` | Start tracking manually |
 | `stop` | `() => void` | Stop tracking |
+| `setSource` | `(source: EyeSource) => Promise<void>` | Switch sources with a blend; rejects if the new one can't start |
 
 ### React — Three.js Parallax
 
@@ -434,16 +538,20 @@ function ThreeScene() {
 }
 ```
 
-**`useParallaxEngine` accepts** the same options as `ParallaxEngineConfig` plus `autoStart` (default: `true`). It returns the same `UseParallaxReturn` shape as `useParallaxCSS`.
+**`useParallaxEngine` accepts** the same options as `ParallaxEngineConfig` (including `source`) plus `autoStart` (same defaults as above). It returns the same `UseParallaxReturn` shape as `useParallaxCSS`.
 
 ## Architecture
 
 ```
-Camera Feed → MediaPipe Face Mesh → 8 Facial Landmarks
+Source: Pointer | Scroll | Orientation | Face
+                                          ↓
+                    Camera Feed → MediaPipe Face Mesh → 8 Facial Landmarks
+                                          ↓
+                    Coordinate Mapper (camera pixels → meters relative to screen)
+                                          ↓
+                    One-Euro Filter (adaptive smoothing)
     ↓
-Coordinate Mapper (camera pixels → meters relative to screen)
-    ↓
-One-Euro Filter (adaptive smoothing)
+Engine (blends between sources, holds on tracking loss)
     ↓
 Off-Axis Frustum Computation
     ↓
@@ -491,29 +599,33 @@ Three verification tests:
 interface ParallaxEngineConfig {
   adapter: ThreeJSAdapter | CSSAdapter;
   screen?: Partial<ScreenConfig>;       // auto-computed from viewport if omitted
+  source?: EyeSource;                    // default: FaceSource from tracking + calibration
   calibration?: Partial<CalibrationConfig>;
-  tracking?: { maxFps?, facingMode?, smoothing? };
+  tracking?: { maxFps?, facingMode?, smoothing?, wasmPath?, modelPath? };
   ppi?: number;                          // CSS pixels per inch (default: 96)
+  blendMs?: number;                      // source switch / reacquire blend (default: 500)
   onTrack?: (position: EyePosition) => void;
-  onTrackingLost?: () => void;
+  onTrackingLost?: () => void;           // the view holds until tracking returns
   onScreenChange?: (screen: ScreenConfig) => void;
 }
 ```
 
 | Method | Description |
 |--------|-------------|
-| `start()` | Initialize camera + MediaPipe and begin tracking |
+| `start()` | Start the source (for the webcam: camera + MediaPipe) |
 | `stop()` | Pause tracking |
 | `destroy()` | Full cleanup |
+| `setSource(source)` | Switch sources live, blending over `blendMs` |
+| `getSource()` | The active source (e.g. to call `setDistance()`) |
 | `setPpi(ppi)` | Update PPI and recompute screen dimensions |
 | `updateCalibration(updates)` | Adjust camera FOV, IPD, offset, mirror |
 | `updateScreen(updates)` | Set screen dimensions directly |
 | `updateScreenFromViewport()` | Recompute screen from viewport + PPI |
 | `setEyeOffset(offset)` | Set the tracked position zero-origin |
-| `setSmoothing(type)` | Switch filter: `'none'`, `'ema'`, `'one-euro'` |
+| `setSmoothing(type)` | Switch filter: `'none'`, `'ema'`, `'one-euro'` (webcam only) |
 | `getEyePosition()` | Current adjusted eye position |
 | `getRawEyePosition()` | Position before offset applied |
-| `getRawFaceData()` | All tracked landmarks + blink state |
+| `getRawFaceData()` | All tracked landmarks + blink state (webcam only) |
 | `getScreenConfig()` | Current physical screen dimensions |
 | `getAdapter()` | The active adapter instance |
 | `getFilter()` | The active smoothing filter instance |
@@ -522,6 +634,13 @@ interface ParallaxEngineConfig {
 ### Types
 
 ```typescript
+interface EyeSource {
+  start(emit: (position: EyePosition) => void, lost: () => void): Promise<void>;
+  stop(): void;
+  destroy(): void;
+  updateScreen?(screen: ScreenConfig): void; // receives the engine's screen size
+}
+
 interface EyePosition {
   x: number;  // meters, positive = right of screen center
   y: number;  // meters, positive = above screen center
@@ -580,7 +699,7 @@ new CSSAdapter({
 })
 ```
 
-Additional methods: `setSensitivity(value)`, `getSensitivity()`.
+Additional methods: `setSensitivity(value)`, `getSensitivity()`, and `setScrollOffsetY(px)`: if the 3D container scrolls inside an element rather than the window, pass that element's `scrollTop` so the vanishing point stays centered on screen.
 
 ### UI Components
 
@@ -610,9 +729,17 @@ src/
   three.ts                      # Three.js entry point (re-exports core + adds Three.js deps)
   react.ts                      # React hooks entry point (re-exports core + adds hooks)
   core/
-    ParallaxEngine.ts           # orchestrator
+    ParallaxEngine.ts           # orchestrator: runs a source, blends between sources
+    transition.ts               # eased blends
+  sources/
+    types.ts                    # EyeSource interface
+    PointerSource.ts            # mouse / trackpad
+    ScrollSource.ts             # scroll position of an element
+    OrientationSource.ts        # device tilt
+    FaceSource.ts               # webcam (wraps FaceTracker)
   tracking/
-    FaceTracker.ts              # webcam + MediaPipe
+    FaceTracker.ts              # webcam + MediaPipe (loaded on demand)
+    mediapipe.ts                # MEDIAPIPE_VERSION and default asset URLs
     filters.ts                  # One-Euro and EMA smoothing
     types.ts                    # EyePosition, RawFaceData, TrackingConfig
   projection/
@@ -631,7 +758,8 @@ src/
 examples/
   three-demo/                   # 3D targets in a grid room
   css-demo/                     # depth-layered cards and shapes (no Three.js)
-  ui-controls-demo/             # spatial navigation through stacked depth layers
+  ui-controls-demo/             # spatial navigation through stacked depth layers; pointer, scroll, camera, tilt
+test/                           # Vitest suite (jsdom, plus Node for SSR)
 ```
 
 ## Scripts
@@ -642,6 +770,7 @@ npm run build      # build library (ESM + CJS) + type declarations
 npm run build:site # build demo site for deployment (multi-page app)
 npm run preview    # preview production site build
 npm run typecheck  # type-check without emitting
+npm test           # run the Vitest suite
 ```
 
 ## Deployment
@@ -680,10 +809,8 @@ Note: webcam tracking requires HTTPS. Most hosting providers (Vercel, Netlify, G
 
 ## Dependencies
 
-**Required peer dependency:**
-- **[@mediapipe/tasks-vision](https://www.npmjs.com/package/@mediapipe/tasks-vision)** — face landmark detection
-
 **Optional peer dependencies:**
+- **[@mediapipe/tasks-vision](https://www.npmjs.com/package/@mediapipe/tasks-vision)** `0.10.34` — face landmark detection (only for webcam tracking)
 - **[three](https://www.npmjs.com/package/three)** — 3D rendering (only needed for `parallax-display/three`)
 - **[react](https://www.npmjs.com/package/react)** — React 18+ (only needed for `parallax-display/react`)
 
