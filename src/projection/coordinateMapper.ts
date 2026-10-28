@@ -2,7 +2,7 @@ import type { EyePosition, RawFaceData } from '../tracking/types';
 import type { CalibrationConfig, ScreenConfig } from './types';
 import { screenFromViewport } from './screenFromViewport';
 
-const DEFAULT_CALIBRATION: CalibrationConfig = {
+export const DEFAULT_CALIBRATION: CalibrationConfig = {
   realIPD: 0.063,
   cameraFovDegrees: 60,
   cameraOffsetY: 0.02,
@@ -10,7 +10,9 @@ const DEFAULT_CALIBRATION: CalibrationConfig = {
 };
 
 export class CoordinateMapper {
-  private screen: ScreenConfig;
+  /** Resolved lazily so constructing a mapper never touches `window` (SSR) */
+  private screen: ScreenConfig | null = null;
+  private screenOverrides: Partial<ScreenConfig>;
   private calibration: CalibrationConfig;
   /** Precomputed: apparent IPD at 1 meter distance in normalized camera coords */
   private ipdAtOneMeter: number;
@@ -19,7 +21,7 @@ export class CoordinateMapper {
     screen: Partial<ScreenConfig> = {},
     calibration: Partial<CalibrationConfig> = {},
   ) {
-    this.screen = { ...screenFromViewport(), ...screen };
+    this.screenOverrides = { ...screen };
     this.calibration = { ...DEFAULT_CALIBRATION, ...calibration };
 
     // At distance D, an object of real size S appears as:
@@ -55,7 +57,7 @@ export class CoordinateMapper {
   }
 
   getScreenConfig(): ScreenConfig {
-    return { ...this.screen };
+    return { ...this.resolveScreen() };
   }
 
   getCalibrationConfig(): CalibrationConfig {
@@ -69,6 +71,17 @@ export class CoordinateMapper {
   }
 
   updateScreen(updates: Partial<ScreenConfig>): void {
-    Object.assign(this.screen, updates);
+    if (this.screen) {
+      Object.assign(this.screen, updates);
+    } else {
+      Object.assign(this.screenOverrides, updates);
+    }
+  }
+
+  private resolveScreen(): ScreenConfig {
+    if (!this.screen) {
+      this.screen = { ...screenFromViewport(), ...this.screenOverrides };
+    }
+    return this.screen;
   }
 }

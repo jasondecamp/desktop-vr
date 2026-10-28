@@ -1,11 +1,15 @@
 import * as THREE from 'three';
 // Public API equivalent:
-//   import { ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport, computeOffAxisFrustum } from 'parallax-display';
+//   import {
+//     ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport, computeOffAxisFrustum,
+//     PointerSource, ScrollSource, FaceSource, OrientationSource,
+//   } from 'parallax-display';
 //   import { CalibrationOverlay, DiagnosticOverlay, GridRoom } from 'parallax-display/three';
 import {
   ParallaxEngine, CSSAdapter, CalibrationPanel, screenFromViewport, computeOffAxisFrustum,
+  PointerSource, ScrollSource, FaceSource, OrientationSource,
 } from '../../src/index';
-import type { EyePosition } from '../../src/index';
+import type { EyePosition, EyeSource } from '../../src/index';
 import {
   CalibrationOverlay, DiagnosticOverlay, GridRoom,
 } from '../../src/three';
@@ -13,7 +17,7 @@ import {
 const screen = screenFromViewport();
 const container = document.getElementById('scene')!;
 const statusEl = document.getElementById('status')!;
-const startBtn = document.getElementById('start-btn')!;
+const sourceButtons = document.querySelectorAll<HTMLButtonElement>('#source-bar button');
 
 // --- Three.js grid room background ---
 
@@ -58,8 +62,7 @@ renderGrid();
 // =====================================================
 
 const MAX_DEPTH = 5;
-// TODO: restore to 400 after testing
-const TRANSITION_MS = 1600;
+const TRANSITION_MS = 400; // keep in sync with .nav-layer transition in index.html
 const Z_STEP = 500;        // px per background depth level (5x original)
 
 interface NavPage {
@@ -71,6 +74,14 @@ interface NavPage {
 
 // Layer stack: index 0 = deepest background, last = foreground
 const layerStack: HTMLElement[] = [];
+
+// Scroll mode reads the foreground layer's scroll position, so it follows
+// whichever layer is in front as you navigate
+const scrollSource = new ScrollSource({ distance: 0.6, range: 0.5 });
+
+function followForeground() {
+  scrollSource.setElement(layerStack[layerStack.length - 1] ?? null);
+}
 
 function createLayerEl(): HTMLElement {
   const el = document.createElement('div');
@@ -162,6 +173,7 @@ function pushPage(page: NavPage) {
 
   // Animate all layers to their new positions
   updateLayerStyles();
+  followForeground();
 }
 
 function popPage() {
@@ -176,6 +188,7 @@ function popPage() {
 
   // Animate remaining layers back to their new positions
   updateLayerStyles();
+  followForeground();
 
   // Remove the exiting layer after the transition
   setTimeout(() => {
@@ -381,6 +394,22 @@ const analyticsPage: NavPage = {
   },
 };
 
+const releaseNotesPage: NavPage = {
+  id: 'release-notes',
+  title: 'Release Notes',
+  subtitle: 'A long page for trying scroll mode: scroll it and watch the layers behind slide.',
+  buildContent: (el) => {
+    el.innerHTML = Array.from({ length: 24 }, (_, i) => {
+      const version = `0.${Math.floor((23 - i) / 6)}.${(23 - i) % 6}`;
+      return `
+        <div class="detail-section">
+          <h4>v${version}</h4>
+          <div class="detail-text">Improved depth layering, tuned blur falloff, and smoothed transitions between navigation levels. Entry ${24 - i} of 24.</div>
+        </div>`;
+    }).join('');
+  },
+};
+
 // --- Root page (Level 0) ---
 
 const rootPage: NavPage = {
@@ -393,6 +422,7 @@ const rootPage: NavPage = {
     addNavCard(el, 'Analytics', 'Usage metrics and performance dashboards', analyticsPage);
     addNavCard(el, 'Documentation', 'Guides, API reference, and examples', projectFilesPage);
     addNavCard(el, 'Team', 'Members, roles, and permissions', projectTasksPage);
+    addNavCard(el, 'Release Notes', 'A long, scrollable page for scroll mode', releaseNotesPage);
   },
 };
 
@@ -413,32 +443,69 @@ document.addEventListener('keydown', (e) => {
 // Parallax Engine
 // =====================================================
 
+// Starts in pointer mode: no permission prompt, no button to press.
+// Camera and tilt are opt-in and blend in from wherever the view is.
+
+type SourceName = 'pointer' | 'scroll' | 'camera' | 'tilt';
+
+
+const sources: Record<SourceName, () => EyeSource> = {
+  pointer: () => new PointerSource({ distance: 0.6 }),
+  scroll: () => {
+    followForeground();
+    return scrollSource;
+  },
+  camera: () => new FaceSource({ smoothing: 'one-euro' }),
+  tilt: () => new OrientationSource({ distance: 0.6, range: 0.5 }),
+};
+const statusLabel: Record<SourceName, string> = {
+  pointer: 'pointer',
+  scroll: 'scroll',
+  camera: 'camera: tracking',
+  tilt: 'tilt',
+};
+let activeSource: SourceName = 'pointer';
+
 const adapter = new CSSAdapter({ container, sensitivity: 1.0 });
 const engine = new ParallaxEngine({
   adapter,
-  persist: true,
-  tracking: { smoothing: 'one-euro' },
+  source: sources.pointer(),
   onTrack: (pos) => {
-    statusEl.textContent = 'tracking';
+    statusEl.textContent = statusLabel[activeSource];
     lastEyePos = pos;
   },
-  onTrackingLost: () => { statusEl.textContent = 'face not detected'; },
+  onTrackingLost: () => { statusEl.textContent = 'camera: face not detected'; },
 });
 
 new CalibrationPanel({ engine, startCollapsed: true });
 new CalibrationOverlay({ engine, autoStart: false });
 new DiagnosticOverlay({ engine });
 
-startBtn.addEventListener('click', async () => {
-  startBtn.style.display = 'none';
-  statusEl.textContent = 'initializing camera...';
-  try {
-    await engine.start();
-    statusEl.textContent = 'tracking';
-  } catch (err) {
-    statusEl.textContent = `error: ${err instanceof Error ? err.message : err}`;
-    startBtn.style.display = 'block';
-  }
+engine.start();
+
+function markActive(name: SourceName) {
+  sourceButtons.forEach((btn) => {
+    btn.setAttribute('aria-pressed', String(btn.dataset.source === name));
+  });
+}
+
+sourceButtons.forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const name = btn.dataset.source as SourceName;
+    if (name === activeSource) return;
+    sourceButtons.forEach((b) => { b.disabled = true; });
+    statusEl.textContent = name === 'camera' ? 'opening camera...' : `switching to ${name}...`;
+    try {
+      // Called straight from the click so iOS can show its motion prompt
+      await engine.setSource(sources[name]());
+      activeSource = name;
+      markActive(name);
+    } catch (err) {
+      statusEl.textContent = `${name}: ${err instanceof Error ? err.message : err}`;
+    } finally {
+      sourceButtons.forEach((b) => { b.disabled = false; });
+    }
+  });
 });
 
 window.addEventListener('resize', () => {
